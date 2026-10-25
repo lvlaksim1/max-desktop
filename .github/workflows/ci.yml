@@ -25,3 +25,5 @@ jobs:
         run: dotnet build src/MaxDesktop.UpdateAgent/MaxDesktop.UpdateAgent.csproj -c Release
       - name: Verify fail-closed transport
         run: dotnet run --project tests/MaxDesktop.Protocol.Smoke/MaxDesktop.Protocol.Smoke.csproj -c Release
+      - name: Verify installer digest and file-handle closure on Windows
+        run: dotnet run --project tests/MaxDesktop.Update.Smoke/MaxDesktop.Update.Smoke.csproj -c Release

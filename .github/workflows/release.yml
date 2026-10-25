@@ -45,6 +45,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Updater build failed' }
           dotnet run --project tests/MaxDesktop.Protocol.Smoke/MaxDesktop.Protocol.Smoke.csproj -c Release
           if ($LASTEXITCODE -ne 0) { throw 'Protocol smoke checks failed' }
+          dotnet run --project tests/MaxDesktop.Update.Smoke/MaxDesktop.Update.Smoke.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Updater file locking checks failed' }
       - name: Publish self-contained Windows binaries
         shell: pwsh
         run: |
