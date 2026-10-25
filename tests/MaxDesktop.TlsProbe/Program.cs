@@ -54,3 +54,5 @@ foreach (var protocol in new[] { SslProtocols.None, SslProtocols.Tls12 })
     Console.WriteLine($"PROBE_END TLS_PREF={protocol}");
     await Task.Delay(TimeSpan.FromSeconds(5));
 }
+
+return 0;
