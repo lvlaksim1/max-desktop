@@ -1,0 +1,24 @@
+name: Diagnose MAX TCP TLS handshake (no login)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/MaxDesktop.TlsProbe/**'
+      - '.github/workflows/max-tls-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tcp-tls-diagnostics:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Check TLS endpoint only (no auth packets)
+        run: dotnet run --project tests/MaxDesktop.TlsProbe/MaxDesktop.TlsProbe.csproj -c Release
