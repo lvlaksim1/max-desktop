@@ -1,3 +1,9 @@
-# Project identity
+# MAX Desktop — идентичность проекта
 
-Capture the project name, purpose, repository role, and what this repository is responsible for.
+Репозиторий: `lvlaksim1/max-desktop`, публичный, основная ветка `main`.
+
+Назначение: независимый нативный настольный клиент мессенджера MAX для Windows.
+
+Менеджер проекта: существующий `project-manager`, установленный через `lvlaksim1/repo-factory` (Project Manager v2). Это самостоятельный проект; проектный менеджер репозитория MailRu Desktop не переносится, общие архитектурные практики применяются как образец.
+
+Источник для анализа протокола MAX: `lvlaksim1/max-android-research`. Источник образца установки/обновления/UI: `lvlaksim1/mailru-desktop`.
