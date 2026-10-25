@@ -48,7 +48,9 @@ public static class MaxTcpFraming
             0xff => throw new NotSupportedException("Ответ MAX использует Zstandard. Требуется декодер Zstandard."),
             _ => MaxLz4.Decompress(body)
         };
-        var payload = MaxMessagePack.Decode(decompressed) as Dictionary<string, object?>
+        var payload = decompressed.Length == 0
+            ? new Dictionary<string, object?>()
+            : MaxMessagePack.Decode(decompressed) as Dictionary<string, object?>
             ?? throw new InvalidDataException("Ожидается карта полей MessagePack.");
         return new MaxWireFrame(
             header[0], header[1],

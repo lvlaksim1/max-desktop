@@ -241,7 +241,12 @@ public static class MaxMessagePack
             sbyte type = (sbyte)Byte();
             byte[] data = Binary(length);
             // MAX wraps some individual MessagePack values in extension type 1.
-            return type == 1 ? MaxMessagePack.Decode(data) : data;
+            if (type != 1) return data;
+            var nested = new Reader(data);
+            object? unwrapped = nested.ReadValue(depth);
+            if (!nested.EndOfData)
+                throw new InvalidDataException("Лишние байты во вложенном MessagePack.");
+            return unwrapped;
         }
 
         private object?[] ReadArray(int length, int depth)
