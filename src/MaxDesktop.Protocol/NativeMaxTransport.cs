@@ -45,6 +45,10 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     private string? _instanceId;
     private byte[]? _mode;
     private int? _codeLength;
+    // These markers never contain a phone, verification code or authorization token.
+    private string _connectionPhase = "ОЖИДАНИЕ";
+    public string LastConnectionPhase => _connectionPhase;
+
 
     public NativeMaxTransport(IMaxSessionStore sessionStore)
     {
@@ -76,7 +80,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             {
                 State = ConnectionState.Failed;
                 await DisconnectAsync();
-                return new AuthResult(State, SafeError(ex));
+                return new AuthResult(State, ConnectionError(ex));
             }
         }
         finally { _authGate.Release(); }
@@ -121,7 +125,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             {
                 State = ConnectionState.Failed;
                 await DisconnectAsync();
-                return new AuthResult(State, SafeError(ex));
+                return new AuthResult(State, ConnectionError(ex));
             }
         }
         finally { _authGate.Release(); }
@@ -165,7 +169,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             }
             catch (Exception ex) when (IsExpected(ex))
             {
-                return new AuthResult(ConnectionState.Failed, SafeError(ex));
+                return new AuthResult(ConnectionState.Failed, ConnectionError(ex));
             }
         }
         finally { _authGate.Release(); }
@@ -194,7 +198,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             }
             catch (Exception ex) when (IsExpected(ex))
             {
-                return new AuthResult(ConnectionState.AwaitingPassword, SafeError(ex));
+                return new AuthResult(ConnectionState.AwaitingPassword, ConnectionError(ex));
             }
         }
         finally { _authGate.Release(); }
@@ -255,7 +259,9 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(15));
+            _connectionPhase = "TCP_CONNECT";
             await _tcp.ConnectAsync(Host, Port, timeout.Token);
+            _connectionPhase = "TLS_HANDSHAKE";
             var ssl = new SslStream(_tcp.GetStream(), false);
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
@@ -264,6 +270,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                 CertificateRevocationCheckMode = X509RevocationMode.Online
             }, timeout.Token);
             _ssl = ssl;
+            _connectionPhase = "TLS_ESTABLISHED";
             _connectionCancel = new CancellationTokenSource();
             _readTask = ReadLoopAsync(ssl, _connectionCancel.Token);
             var response = await RequestAsync(SessionInit, new Dictionary<string, object?>
@@ -292,6 +299,16 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         ThrowIfDisposed();
         if (_ssl is not { } ssl)
             throw new IOException("Соединение с MAX не установлено.");
+        _connectionPhase = opcode switch
+        {
+            SessionInit => "SESSION_INIT",
+            AuthRequest => "AUTH_REQUEST",
+            VerifyCode => "AUTH_CHECK_CODE",
+            Login => "LOGIN",
+            CheckPassword => "AUTH_PASSWORD",
+            Ping => "PING",
+            _ => "PROTOCOL_REQUEST"
+        };
         ushort seq = unchecked((ushort)Interlocked.Increment(ref _sequence));
         var waiter = new TaskCompletionSource<MaxWireFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_pending.TryAdd(seq, waiter))
@@ -389,6 +406,21 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             error = Field(nested, "message") ?? Field(nested, "type") ?? Field(nested, "code");
         string message = error?.ToString() ?? "сервер отклонил запрос";
         return message.Length > 160 ? message[..160] : message;
+    }
+
+    private string ConnectionError(Exception ex)
+    {
+        // An unexpected EOF is a connectivity failure, not a rejected phone number.
+        var cause = ex.GetBaseException();
+        if ((ex is IOException || cause is IOException) &&
+            (ex.Message.Contains("unexpected EOF", StringComparison.OrdinalIgnoreCase) ||
+             cause.Message.Contains("unexpected EOF", StringComparison.OrdinalIgnoreCase) ||
+             cause.Message.Contains("0 bytes from the transport", StringComparison.OrdinalIgnoreCase)))
+        {
+            return $"Этап {_connectionPhase}: соединение закрыто удалённым узлом (EOF). " +
+                   "Это не подтверждает ошибку телефона или SMS-кода.";
+        }
+        return $"Этап {_connectionPhase}: {SafeError(ex)}";
     }
 
     private static string SafeError(Exception ex)
