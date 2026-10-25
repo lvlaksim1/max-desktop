@@ -7,6 +7,9 @@
     <ApplicationIcon Condition="Exists('app.ico')">app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../MaxDesktop.Protocol/MaxDesktop.Protocol.csproj" />
   </ItemGroup>
 </Project>
