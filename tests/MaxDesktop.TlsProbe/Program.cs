@@ -19,7 +19,7 @@ catch (Exception e)
     return 0; // diagnostics, not a release gate
 }
 
-foreach (var option in new[] { ("SystemRoot", SslProtocols.None), ("BundledMaxRoot", SslProtocols.None), ("SystemTls12", SslProtocols.Tls12) })
+foreach (var option in new[] { ("SystemRoot", SslProtocols.None), ("BundledMaxRoot", SslProtocols.None), ("BundledExplicit", SslProtocols.Tls12 | SslProtocols.Tls13), ("SystemTls12", SslProtocols.Tls12) })
 {
     var (trust, protocol) = option;
     Console.WriteLine($"PROBE_BEGIN TRUST={trust} TLS_PREF={protocol}");
@@ -36,7 +36,7 @@ foreach (var option in new[] { ("SystemRoot", SslProtocols.None), ("BundledMaxRo
             {
                 if (errors != SslPolicyErrors.None)
                     Console.WriteLine($"TLS_CERTIFICATE_POLICY_ERRORS {errors}");
-                bool allowed = trust == "BundledMaxRoot"
+                bool allowed = trust.StartsWith("Bundled", StringComparison.Ordinal)
                     ? MaxTlsCertificateValidator.Validate(sender, certificate, chain, errors)
                     : errors == SslPolicyErrors.None;
                 Console.WriteLine($"TLS_CHAIN_VALID={allowed}");
