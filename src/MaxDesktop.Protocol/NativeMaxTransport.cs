@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -47,6 +48,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     private int? _codeLength;
     private bool _tlsCertificateSeen;
     private bool _tlsCertificateTrusted;
+    private int _tlsAttemptCount;
     // These markers never contain a phone, verification code or authorization token.
     private string _connectionPhase = "ОЖИДАНИЕ";
     public string LastConnectionPhase => _connectionPhase;
@@ -292,34 +294,14 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         await DisconnectAsync();
         _deviceId = deviceId;
         _instanceId = instanceId;
-        _tcp = new TcpClient();
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(15));
-            _connectionPhase = "TCP_CONNECT";
-            await _tcp.ConnectAsync(Host, Port, timeout.Token);
-            _connectionPhase = "TLS_HANDSHAKE";
-            _tlsCertificateSeen = false;
-            _tlsCertificateTrusted = false;
-            var ssl = new SslStream(_tcp.GetStream(), false,
-                (sender, certificate, chain, errors) =>
-                {
-                    _tlsCertificateSeen = certificate is not null;
-                    _tlsCertificateTrusted = MaxTlsCertificateValidator.Validate(
-                        sender, certificate, chain, errors);
-                    return _tlsCertificateTrusted;
-                });
-            await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
-            {
-                TargetHost = Host,
-                // Use Windows' supported TLS versions and cipher policy.
-                // The anonymous connection test succeeds with this exact setting.
-                EnabledSslProtocols = SslProtocols.None,
-                CertificateRevocationCheckMode = X509RevocationMode.Online
-            }, timeout.Token);
-            _ssl = ssl;
-            _connectionPhase = "TLS_ESTABLISHED";
+            // One resolved IP may have a broken route; try up to three endpoints
+            // with a five-second spacing. Every endpoint uses the same host SNI
+            // and full certificate validation. No authentication traffic is sent
+            // before a verified TLS connection is established.
+            await ConnectVerifiedTlsAsync(ct);
+            var ssl = _ssl ?? throw new IOException("TLS-соединение не инициализировано.");
             _connectionCancel = new CancellationTokenSource();
             _readTask = ReadLoopAsync(ssl, _connectionCancel.Token);
             var response = await RequestAsync(SessionInit, new Dictionary<string, object?>
@@ -340,6 +322,73 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             await DisconnectAsync();
             throw;
         }
+    }
+
+    private async Task ConnectVerifiedTlsAsync(CancellationToken ct)
+    {
+        _connectionPhase = "DNS_RESOLVE";
+        IPAddress[] resolved = await Dns.GetHostAddressesAsync(Host, ct);
+        IPAddress[] endpoints = resolved
+            .Where(ip => ip.AddressFamily == AddressFamily.InterNetwork)
+            .Concat(resolved.Where(ip => ip.AddressFamily == AddressFamily.InterNetworkV6))
+            .Distinct().Take(3).ToArray();
+        if (endpoints.Length == 0)
+            throw new IOException("DNS не вернул IP-адрес сервера MAX.");
+
+        Exception? lastFailure = null;
+        _tlsAttemptCount = 0;
+        foreach (IPAddress endpoint in endpoints)
+        {
+            if (_tlsAttemptCount > 0)
+                await Task.Delay(TimeSpan.FromSeconds(5), ct);
+
+            _tlsAttemptCount++;
+            var candidate = new TcpClient(endpoint.AddressFamily);
+            SslStream? candidateSsl = null;
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromSeconds(15));
+
+                _connectionPhase = "TCP_CONNECT";
+                await candidate.ConnectAsync(endpoint, Port, timeout.Token);
+                _connectionPhase = "TLS_HANDSHAKE";
+                _tlsCertificateSeen = false;
+                _tlsCertificateTrusted = false;
+                candidateSsl = new SslStream(candidate.GetStream(), false,
+                    (sender, certificate, chain, errors) =>
+                    {
+                        _tlsCertificateSeen = certificate is not null;
+                        _tlsCertificateTrusted = MaxTlsCertificateValidator.Validate(
+                            sender, certificate, chain, errors);
+                        return _tlsCertificateTrusted;
+                    });
+                await candidateSsl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+                {
+                    // The domain (not the resolved IP) remains the SNI host and
+                    // the verified DNS name for the remote certificate.
+                    TargetHost = Host,
+                    EnabledSslProtocols = SslProtocols.None,
+                    CertificateRevocationCheckMode = X509RevocationMode.Online
+                }, timeout.Token);
+
+                _tcp = candidate;
+                _ssl = candidateSsl;
+                _connectionPhase = "TLS_ESTABLISHED";
+                return;
+            }
+            catch (Exception ex) when (IsExpected(ex) && !ct.IsCancellationRequested)
+            {
+                candidateSsl?.Dispose();
+                candidate.Dispose();
+                lastFailure = ex;
+            }
+        }
+
+        // Preserve the original cause, including an unexpected EOF.
+        throw new IOException(
+            $"Не удалось установить защищённое соединение после {_tlsAttemptCount} попыток.",
+            lastFailure);
     }
 
     private async Task<MaxWireFrame> RequestAsync(ushort opcode,
@@ -473,7 +522,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                     : "Сертификат сервера ещё не был получен."
                 : "Транспортный поток закрылся до завершения запроса.";
             return $"Этап {_connectionPhase}: TLS/TCP-соединение оборвано (EOF). {detail} " +
-                   "Номер телефона и код здесь не проверялись.";
+                   $"Попыток подключения: {_tlsAttemptCount}. Номер телефона и код здесь не проверялись.";
         }
         return $"Этап {_connectionPhase}: {SafeError(ex)}";
     }
