@@ -13,7 +13,7 @@ namespace MaxDesktop.App;
 public partial class MainWindow : Window
 {
     private readonly UserSettings _settings;
-    private readonly IMaxTransport _transport = new UnavailableMaxTransport();
+    private readonly IMaxAuthenticationTransport _transport = new NativeMaxTransport(new ProtectedMaxSessionStore());
     private readonly ObservableCollection<ChatSummary> _chats = new();
     private readonly ObservableCollection<ChatMessage> _messages = new();
 
@@ -28,7 +28,7 @@ public partial class MainWindow : Window
         VersionLabel.Text = "v" + typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
     }
 
-    private void Window_Loaded(object sender, RoutedEventArgs e)
+    private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         Width = Math.Clamp(_settings.WindowWidth, 820, 2800);
         Height = Math.Clamp(_settings.WindowHeight, 520, 1800);
@@ -43,6 +43,15 @@ public partial class MainWindow : Window
         {
             Left = left;
             Top = top;
+        }
+        StatusLabel.Text = "Восстановление сессии MAX...";
+        try
+        {
+            ApplyAuthResult(await _transport.RestoreSessionAsync());
+        }
+        catch (Exception ex)
+        {
+            StatusLabel.Text = "Не удалось восстановить сеанс MAX: " + ex.GetType().Name;
         }
     }
 
@@ -60,6 +69,7 @@ public partial class MainWindow : Window
             _settings.LeftPaneWidth = AccountColumn.ActualWidth;
             _settings.ChatPaneWidth = ChatColumn.ActualWidth;
             SettingsStore.Save(_settings);
+            _transport.Dispose();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -73,8 +83,44 @@ public partial class MainWindow : Window
         dialog.ShowDialog();
     }
 
-    private void AddAccount_Click(object sender, RoutedEventArgs e) =>
-        StatusLabel.Text = UnavailableMaxTransport.Reason;
+    private void AddAccount_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new LoginWindow(_transport) { Owner = this };
+        if (dialog.ShowDialog() == true)
+            ApplyAuthResult(new AuthResult(ConnectionState.Connected, null));
+    }
+
+    private async void RemoveAccount_Click(object sender, RoutedEventArgs e)
+    {
+        RemoveAccountButton.IsEnabled = false;
+        try
+        {
+            await _transport.LogoutAsync();
+            ApplyAuthResult(new AuthResult(ConnectionState.Disconnected, null));
+        }
+        catch (Exception ex)
+        {
+            StatusLabel.Text = "Ошибка выхода: " + ex.GetType().Name;
+        }
+        finally { RemoveAccountButton.IsEnabled = true; }
+    }
+
+    private void ApplyAuthResult(AuthResult result)
+    {
+        bool connected = result.State == ConnectionState.Connected;
+        AccountStateText.Text = connected ? "MAX подключён" : "Не подключён";
+        AccountPhoneText.Text = connected
+            ? _transport.CurrentPhone ?? "Сеанс подтверждён"
+            : "Нет активного сеанса";
+        AddAccountButton.Content = connected ? "Сменить аккаунт" : "+ Добавить аккаунт";
+        RemoveAccountButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+        ConversationHint.Text = connected
+            ? "Вход подтверждён; загрузка чатов ещё не реализована"
+            : "Выберите чат после подключения аккаунта";
+        StatusLabel.Text = connected
+            ? "Авторизация MAX подтверждена. Подключение чатов будет добавлено отдельно."
+            : result.Error ?? "Аккаунт MAX не подключён.";
+    }
 
     private void ChatSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
