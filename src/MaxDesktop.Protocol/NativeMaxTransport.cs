@@ -106,6 +106,12 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                 }, cancellationToken);
                 _requestToken = Field(response.Payload, "token");
                 _codeLength = IntField(response.Payload, "codeLength");
+                if (Map(response.Payload, "callOutParams") is not null && _codeLength is null or <= 0)
+                {
+                    State = ConnectionState.Failed;
+                    return new AuthResult(State,
+                        "MAX запросил подтверждение звонком. Эта ветвь авторизации ещё не реализована; SMS-код может не прийти.");
+                }
                 if (string.IsNullOrEmpty(_requestToken))
                     throw new InvalidDataException("Сервер не вернул токен для проверки номера.");
                 State = ConnectionState.AwaitingVerification;

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.ComponentModel;
 using MaxDesktop.Protocol;
 
 namespace MaxDesktop.App;
@@ -104,6 +105,11 @@ public partial class LoginWindow : Window
         VerifyCodeButton.IsEnabled = !state;
         VerifyPasswordButton.IsEnabled = !state;
         PhoneBox.IsEnabled = !state;
+    }
+
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_busy) e.Cancel = true;
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)
