@@ -26,3 +26,7 @@
 Сборка Windows: `dotnet build src/MaxDesktop.App/MaxDesktop.App.csproj -c Release`. Для первой установки применяется `MaxDesktop_Setup_vX.Y.Z.exe`, для обновления — `MaxDesktop_Update_vX.Y.Z.exe`. Готовые выпуски доступны в [GitHub Releases](https://github.com/lvlaksim1/max-desktop/releases) после успешной проверки.
 
 Двоичные сборки не сохраняются в истории Git или в артефактах GitHub Actions. Установлен профиль Project Manager v2 через [Repo Factory](https://github.com/lvlaksim1/repo-factory).
+
+## Исследование TLS и входа (v0.1.3)
+
+После отчёта пользователя об обрыве соединения при запросе кода в v0.1.2 проведены безопасные сетевые проверки без телефона и учётных данных. На Windows обнаружена ошибка стандартной цепочки TLS, подтверждено успешное подключение через дополнительный доверенный центр сертификации MAX и успешный `SESSION_INIT`. Подробности и границы проверки: [диагностика TLS](docs/protocol/tls-auth-diagnostics-2026-10-26.md). Реальное получение кода пока не подтверждено.
