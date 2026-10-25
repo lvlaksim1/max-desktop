@@ -1,9 +1,9 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using MaxDesktop.UpdateCore;
 
 namespace MaxDesktop.App;
 
@@ -89,11 +89,11 @@ public static class UpdateService
                     progress.Report(new UpdateProgress(percent, $"Загрузка обновления: {percent:0}%"));
                 }
             }
-            using var input = File.OpenRead(temporaryPath);
-            string actual = Convert.ToHexString(await SHA256.HashDataAsync(input, cancellationToken));
-            if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Контрольная сумма обновления не совпала.");
-            File.Move(temporaryPath, finalPath, true);
+            // The verifier disposes its FileStream before renaming the installer.
+            // On Windows, renaming while File.OpenRead is still in scope fails
+            // with ERROR_SHARING_VIOLATION, even for our own process.
+            string actual = await VerifiedInstaller.VerifyAndPromoteAsync(
+                temporaryPath, finalPath, expected, cancellationToken);
             progress.Report(new UpdateProgress(100, "Проверено, установка..."));
             return new PreparedUpdate(finalPath, actual);
         }
