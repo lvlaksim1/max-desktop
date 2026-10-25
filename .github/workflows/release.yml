@@ -1,0 +1,98 @@
+name: Publish MAX Desktop installers
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'Directory.Build.props'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: max-desktop-release
+  cancel-in-progress: false
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Validate application version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.Version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
+          if ('${{ github.ref_type }}' -eq 'tag' -and '${{ github.ref_name }}' -ne "v$version") {
+            throw 'Release tag and application version do not match'
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Build application and verify protocol boundary
+        shell: pwsh
+        run: |
+          dotnet build src/MaxDesktop.App/MaxDesktop.App.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'WPF build failed' }
+          dotnet build src/MaxDesktop.UpdateAgent/MaxDesktop.UpdateAgent.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Updater build failed' }
+          dotnet run --project tests/MaxDesktop.Protocol.Smoke/MaxDesktop.Protocol.Smoke.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Protocol smoke checks failed' }
+      - name: Publish self-contained Windows binaries
+        shell: pwsh
+        run: |
+          dotnet publish src/MaxDesktop.App/MaxDesktop.App.csproj -c Release -r win-x64 --self-contained true -o publish
+          if ($LASTEXITCODE -ne 0) { throw 'Application publish failed' }
+          dotnet publish src/MaxDesktop.UpdateAgent/MaxDesktop.UpdateAgent.csproj -c Release -r win-x64 --self-contained true -o updater-publish
+          if ($LASTEXITCODE -ne 0) { throw 'Updater publish failed' }
+          foreach ($name in @('MaxDesktop.UpdateAgent.exe','MaxDesktop.UpdateAgent.dll','MaxDesktop.UpdateAgent.runtimeconfig.json','MaxDesktop.UpdateAgent.deps.json')) {
+            Copy-Item (Join-Path 'updater-publish' $name) (Join-Path 'publish' $name) -Force
+          }
+      - name: Compile Inno Setup installers
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot install Inno Setup' }
+          }
+          if (-not (Test-Path $iscc)) { throw 'ISCC was not found' }
+          $v = '${{ steps.version.outputs.version }}'
+          $pub = Join-Path $env:GITHUB_WORKSPACE 'publish'
+          $dist = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          & $iscc "/DAppVersion=$v" "/DPublishDir=$pub" "/DOutputDir=$dist" installer/full.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Full installer compilation failed' }
+          & $iscc "/DAppVersion=$v" "/DPublishDir=$pub" "/DOutputDir=$dist" installer/update.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Update installer compilation failed' }
+      - name: Publish binaries only to the newest GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $tag = "v$v"
+          $full = "dist/MaxDesktop_Setup_v$v.exe"
+          $update = "dist/MaxDesktop_Update_v$v.exe"
+          if (-not (Test-Path $full) -or -not (Test-Path $update)) { throw 'Missing installer files' }
+          if (gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null) {
+            Write-Output "Release $tag already exists; not overwriting files"
+            exit 0
+          }
+          $digest = (Get-FileHash $update -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  MaxDesktop_Update_v$v.exe" | Set-Content -Encoding ASCII "$update.sha256"
+          gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes "Первый установочный выпуск нативного интерфейса. Авторизация и обмен MAX пока не реализованы." --latest
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publish failed' }
+          $prior = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
+          foreach ($item in $prior) {
+            if ($item.tagName -eq $tag) { continue }
+            gh release delete $item.tagName --repo $env:GITHUB_REPOSITORY --yes --cleanup-tag
+            if ($LASTEXITCODE -ne 0) { throw "Could not remove old release $($item.tagName)" }
+          }
