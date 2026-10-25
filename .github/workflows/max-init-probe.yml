@@ -1,0 +1,24 @@
+name: Diagnose MAX SESSION_INIT (no login)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/MaxDesktop.InitProbe/**'
+      - '.github/workflows/max-init-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  session-init-diagnostics:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Verify anonymous SESSION_INIT without account data
+        run: dotnet run --project tests/MaxDesktop.InitProbe/MaxDesktop.InitProbe.csproj -c Release
