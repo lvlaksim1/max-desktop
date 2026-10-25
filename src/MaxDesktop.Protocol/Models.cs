@@ -1,9 +1,28 @@
 namespace MaxDesktop.Protocol;
 
-public enum ConnectionState { Disconnected, Connecting, AwaitingVerification, Connected, Failed }
+public enum ConnectionState { Disconnected, Connecting, AwaitingVerification, AwaitingPassword, Connected, Failed }
 public sealed record ChatSummary(long Id, string Title, string Preview, int UnreadCount);
 public sealed record ChatMessage(long Id, long ChatId, string Sender, string Text, DateTimeOffset SentAt);
-public sealed record AuthResult(ConnectionState State, string? Error);
+public sealed record AuthResult(ConnectionState State, string? Error, int? CodeLength = null, string? PasswordHint = null);
+
+
+public sealed record MaxSavedSession(string Phone, string LoginToken, string DeviceId, string InstanceId);
+
+/// <summary>Session storage is injected so the protocol layer does not own Windows UI or DPAPI APIs.</summary>
+public interface IMaxSessionStore
+{
+    MaxSavedSession? Load();
+    void Save(MaxSavedSession session);
+    void Delete();
+}
+
+public interface IMaxAuthenticationTransport : IMaxTransport, IDisposable
+{
+    Task<AuthResult> RestoreSessionAsync(CancellationToken cancellationToken = default);
+    Task<AuthResult> VerifyPasswordAsync(string password, CancellationToken cancellationToken = default);
+    Task LogoutAsync(CancellationToken cancellationToken = default);
+    string? CurrentPhone { get; }
+}
 
 public interface IMaxTransport
 {
