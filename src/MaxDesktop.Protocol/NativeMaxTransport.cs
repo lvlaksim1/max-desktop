@@ -262,7 +262,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             _connectionPhase = "TCP_CONNECT";
             await _tcp.ConnectAsync(Host, Port, timeout.Token);
             _connectionPhase = "TLS_HANDSHAKE";
-            var ssl = new SslStream(_tcp.GetStream(), false);
+            var ssl = new SslStream(_tcp.GetStream(), false, MaxTlsCertificateValidator.Validate);
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
                 TargetHost = Host,
