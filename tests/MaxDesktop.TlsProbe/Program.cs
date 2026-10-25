@@ -1,3 +1,4 @@
+using MaxDesktop.Protocol;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -18,9 +19,10 @@ catch (Exception e)
     return 0; // diagnostics, not a release gate
 }
 
-foreach (var protocol in new[] { SslProtocols.None, SslProtocols.Tls12 })
+foreach (var option in new[] { ("SystemRoot", SslProtocols.None), ("BundledMaxRoot", SslProtocols.None), ("SystemTls12", SslProtocols.Tls12) })
 {
-    Console.WriteLine($"PROBE_BEGIN TLS_PREF={protocol}");
+    var (trust, protocol) = option;
+    Console.WriteLine($"PROBE_BEGIN TRUST={trust} TLS_PREF={protocol}");
     string phase = "TCP_CONNECT";
     try
     {
@@ -30,11 +32,15 @@ foreach (var protocol in new[] { SslProtocols.None, SslProtocols.Tls12 })
         Console.WriteLine("TCP_OK");
         phase = "TLS_HANDSHAKE";
         using var ssl = new SslStream(tcp.GetStream(), false,
-            (_, _, _, errors) =>
+            (sender, certificate, chain, errors) =>
             {
                 if (errors != SslPolicyErrors.None)
                     Console.WriteLine($"TLS_CERTIFICATE_POLICY_ERRORS {errors}");
-                return errors == SslPolicyErrors.None;
+                bool allowed = trust == "BundledMaxRoot"
+                    ? MaxTlsCertificateValidator.Validate(sender, certificate, chain, errors)
+                    : errors == SslPolicyErrors.None;
+                Console.WriteLine($"TLS_CHAIN_VALID={allowed}");
+                return allowed;
             });
         await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
         {
@@ -51,7 +57,7 @@ foreach (var protocol in new[] { SslProtocols.None, SslProtocols.Tls12 })
         // Exception text often carries host, proxy or OS-specific data.
         // Do not print it into public CI logs.
     }
-    Console.WriteLine($"PROBE_END TLS_PREF={protocol}");
+    Console.WriteLine($"PROBE_END TRUST={trust} TLS_PREF={protocol}");
     await Task.Delay(TimeSpan.FromSeconds(5));
 }
 
