@@ -21,6 +21,9 @@
             ToolTip="Введите номер в формате +79991234567"/>
    <Button x:Name="SendCodeButton" Content="Получить код" HorizontalAlignment="Stretch"
            Margin="0,11,0,0" Click="SendCode_Click"/>
+   <Button x:Name="TestConnectionButton" Content="Проверить соединение (без номера)" HorizontalAlignment="Stretch"
+           Margin="0,8,0,0" Click="TestConnection_Click"
+           ToolTip="Проверка TCP, TLS и SESSION_INIT без отправки номера телефона и SMS-кода"/>
   </StackPanel>
   <StackPanel Grid.Row="2" Margin="0,18,0,0">
    <StackPanel x:Name="CodeSection" Visibility="Collapsed">

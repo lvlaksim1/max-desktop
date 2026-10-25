@@ -32,6 +32,23 @@ public partial class LoginWindow : Window
         finally { Busy(false); }
     }
 
+    private async void TestConnection_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        Busy(true);
+        StatusText.Text = "Проверка TCP, TLS и начального соединения без номера телефона...";
+        try
+        {
+            var result = await _transport.ProbeConnectionAsync();
+            StatusText.Text = result.Error ?? "Проверка завершена.";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "Ошибка диагностики: " + ex.GetType().Name;
+        }
+        finally { Busy(false); }
+    }
+
     private async void VerifyCode_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -102,6 +119,7 @@ public partial class LoginWindow : Window
     {
         _busy = state;
         SendCodeButton.IsEnabled = !state;
+        TestConnectionButton.IsEnabled = !state;
         VerifyCodeButton.IsEnabled = !state;
         VerifyPasswordButton.IsEnabled = !state;
         PhoneBox.IsEnabled = !state;

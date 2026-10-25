@@ -19,6 +19,7 @@ public interface IMaxSessionStore
 public interface IMaxAuthenticationTransport : IMaxTransport, IDisposable
 {
     Task<AuthResult> RestoreSessionAsync(CancellationToken cancellationToken = default);
+    Task<AuthResult> ProbeConnectionAsync(CancellationToken cancellationToken = default);
     Task<AuthResult> VerifyPasswordAsync(string password, CancellationToken cancellationToken = default);
     Task LogoutAsync(CancellationToken cancellationToken = default);
     string? CurrentPhone { get; }

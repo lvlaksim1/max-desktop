@@ -45,6 +45,8 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     private string? _instanceId;
     private byte[]? _mode;
     private int? _codeLength;
+    private bool _tlsCertificateSeen;
+    private bool _tlsCertificateTrusted;
     // These markers never contain a phone, verification code or authorization token.
     private string _connectionPhase = "ОЖИДАНИЕ";
     public string LastConnectionPhase => _connectionPhase;
@@ -56,6 +58,42 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     }
 
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
+
+    /// <summary>
+    /// Tests the real connection and anonymous SESSION_INIT, sending no phone,
+    /// verification code, login token or existing session identifier.
+    /// </summary>
+    public async Task<AuthResult> ProbeConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        await _authGate.WaitAsync(cancellationToken);
+        try
+        {
+            ThrowIfDisposed();
+            if (State is ConnectionState.Connected or ConnectionState.AwaitingVerification or ConnectionState.AwaitingPassword)
+                return new AuthResult(State, "Диагностика недоступна во время активной авторизации.");
+
+            try
+            {
+                string testDeviceId = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+                string testInstanceId = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+                await OpenConnectionAsync(testDeviceId, testInstanceId, cancellationToken);
+                _connectionPhase = "SESSION_INIT_OK";
+                return new AuthResult(ConnectionState.Disconnected,
+                    "Проверка успешна: TCP, проверенный TLS и SESSION_INIT работают. Номер телефона не передавался.");
+            }
+            catch (Exception ex) when (IsExpected(ex))
+            {
+                return new AuthResult(ConnectionState.Failed, ConnectionError(ex));
+            }
+            finally
+            {
+                await DisconnectAsync();
+                State = ConnectionState.Disconnected;
+            }
+        }
+        finally { _authGate.Release(); }
+    }
+
     public string? CurrentPhone => State == ConnectionState.Connected ? _phone : null;
 
     public async Task<AuthResult> RestoreSessionAsync(CancellationToken cancellationToken = default)
@@ -262,11 +300,22 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             _connectionPhase = "TCP_CONNECT";
             await _tcp.ConnectAsync(Host, Port, timeout.Token);
             _connectionPhase = "TLS_HANDSHAKE";
-            var ssl = new SslStream(_tcp.GetStream(), false, MaxTlsCertificateValidator.Validate);
+            _tlsCertificateSeen = false;
+            _tlsCertificateTrusted = false;
+            var ssl = new SslStream(_tcp.GetStream(), false,
+                (sender, certificate, chain, errors) =>
+                {
+                    _tlsCertificateSeen = certificate is not null;
+                    _tlsCertificateTrusted = MaxTlsCertificateValidator.Validate(
+                        sender, certificate, chain, errors);
+                    return _tlsCertificateTrusted;
+                });
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
                 TargetHost = Host,
-                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                // Use Windows' supported TLS versions and cipher policy.
+                // The anonymous connection test succeeds with this exact setting.
+                EnabledSslProtocols = SslProtocols.None,
                 CertificateRevocationCheckMode = X509RevocationMode.Online
             }, timeout.Token);
             _ssl = ssl;
@@ -417,8 +466,14 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
              cause.Message.Contains("unexpected EOF", StringComparison.OrdinalIgnoreCase) ||
              cause.Message.Contains("0 bytes from the transport", StringComparison.OrdinalIgnoreCase)))
         {
-            return $"Этап {_connectionPhase}: соединение закрыто удалённым узлом (EOF). " +
-                   "Это не подтверждает ошибку телефона или SMS-кода.";
+            string detail = _connectionPhase == "TLS_HANDSHAKE"
+                ? _tlsCertificateSeen
+                    ? (_tlsCertificateTrusted ? "Сертификат сервера был проверен." :
+                        "Сертификат получен, но проверка не завершилась успешно.")
+                    : "Сертификат сервера ещё не был получен."
+                : "Транспортный поток закрылся до завершения запроса.";
+            return $"Этап {_connectionPhase}: TLS/TCP-соединение оборвано (EOF). {detail} " +
+                   "Номер телефона и код здесь не проверялись.";
         }
         return $"Этап {_connectionPhase}: {SafeError(ex)}";
     }
