@@ -93,3 +93,20 @@ sealed class EmptyStore : IMaxSessionStore
     public void Save(MaxSavedSession session) => throw new Exception("Should not save unverified login.");
     public void Delete() { }
 }
+
+
+if (MaxTlsCertificateValidator.Validate(new object(), null, null,
+    System.Net.Security.SslPolicyErrors.None))
+    throw new Exception("A connection with no server certificate was accepted.");
+
+if (MaxTlsCertificateValidator.Validate(new object(), null, null,
+    System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch))
+    throw new Exception("A certificate name mismatch was accepted.");
+
+const string certResource = "MaxDesktop.Protocol.Certificates.rootca_ssl_rsa2022.crt";
+using (var resource = typeof(MaxTlsCertificateValidator).Assembly.GetManifestResourceStream(certResource))
+{
+    if (resource is null || resource.Length < 1000)
+        throw new Exception("The MAX-specific root CA certificate was not embedded.");
+}
+Console.WriteLine("TLS trust policy and embedded root checks passed.");
