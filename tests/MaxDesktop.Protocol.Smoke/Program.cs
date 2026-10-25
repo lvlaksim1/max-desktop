@@ -87,12 +87,6 @@ Check((await native.RestoreSessionAsync()).State == ConnectionState.Disconnected
 Check((await native.GetChatsAsync()).Count == 0, "do not invent remote chats");
 Console.WriteLine("Native MAX framing, MessagePack, LZ4, fingerprint, authentication boundary: PASS");
 
-sealed class EmptyStore : IMaxSessionStore
-{
-    public MaxSavedSession? Load() => null;
-    public void Save(MaxSavedSession session) => throw new Exception("Should not save unverified login.");
-    public void Delete() { }
-}
 
 
 if (MaxTlsCertificateValidator.Validate(new object(), null, null,
@@ -110,3 +104,10 @@ using (var resource = typeof(MaxTlsCertificateValidator).Assembly.GetManifestRes
         throw new Exception("The MAX-specific root CA certificate was not embedded.");
 }
 Console.WriteLine("TLS trust policy and embedded root checks passed.");
+
+sealed class EmptyStore : IMaxSessionStore
+{
+    public MaxSavedSession? Load() => null;
+    public void Save(MaxSavedSession session) => throw new Exception("Should not save unverified login.");
+    public void Delete() { }
+}
