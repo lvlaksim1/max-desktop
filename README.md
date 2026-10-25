@@ -1,2 +1,20 @@
-# max-desktop
-Native Windows desktop messenger MAX client (.NET 8 / WPF), with MailRu Desktop-style setup, updater and UI architecture
+# MAX Desktop
+
+Нативный настольный клиент мессенджера MAX для Windows.
+
+## Исходная архитектура
+
+База проекта — принципы [MailRu Desktop](https://github.com/lvlaksim1/mailru-desktop): C# / .NET 8 / WPF, пользовательская установка через Inno Setup, отдельные полные установщики и обновления поверх установленной версии, сохранение данных и настроек, собственный компактный интерфейс Windows с темами оформления.
+
+Подробности — [исходная архитектура и требования](docs/architecture-baseline.md).
+
+MAX Desktop является самостоятельным проектом. Исследование сетевого протокола ведётся в [max-android-research](https://github.com/lvlaksim1/max-android-research). Пока протокол не подтверждён реальным успешным входом, его отдельные возможности нельзя считать работающими.
+
+## Состояние
+
+- Публичный репозиторий создан через [Repo Factory](https://github.com/lvlaksim1/repo-factory).
+- Установлены Context Capsule и Project Manager v2.
+- Зафиксирована исходная схема установки, обновления и интерфейса.
+- Код клиента, установщики и механизм обновлений пока не реализованы.
+
+В историю Git не помещать учётные данные, ключи, переписки и сборочные исполняемые файлы. Готовые установщики публиковать через GitHub Releases.
