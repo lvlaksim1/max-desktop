@@ -69,9 +69,9 @@ public static class SettingsStore
 
     private static void SetBrush(string key, string value)
     {
-        Color color;
-        try { color = (Color)ColorConverter.ConvertFromString(value); }
-        catch (FormatException) { color = Color.FromRgb(40, 118, 199); }
-        Application.Current.Resources[key] = new SolidColorBrush(color);
+        System.Windows.Media.Color color;
+        try { color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(value); }
+        catch (FormatException) { color = System.Windows.Media.Color.FromRgb(40, 118, 199); }
+        System.Windows.Application.Current.Resources[key] = new SolidColorBrush(color);
     }
 }
