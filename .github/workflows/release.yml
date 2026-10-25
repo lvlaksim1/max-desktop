@@ -1,4 +1,5 @@
 name: Publish MAX Desktop installers
+# v0.1.3: TLS certificate chain and smoke checks verified in Windows CI.
 
 on:
   push:
