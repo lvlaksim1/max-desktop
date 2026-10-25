@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+publish/
+dist/
+*.exe
+*.dll
+*.pdb
+*.zip
+*.msi
+*.log
