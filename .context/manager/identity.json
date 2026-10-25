@@ -1,0 +1,11 @@
+{
+  "schema": "context-capsule-manager-identity",
+  "schema_version": 1,
+  "manager_id": "project-manager",
+  "role": "Project Manager",
+  "repository": "lvlaksim1/max-desktop",
+  "continuity": "runtime-independent",
+  "authority_model": "bounded-by-mandate",
+  "state_model": "beliefs-goals-intentions-plans",
+  "memory_model": "typed-with-provenance"
+}

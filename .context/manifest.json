@@ -1,0 +1,101 @@
+{
+  "schema": "context-capsule-manifest",
+  "schema_version": 4,
+  "repository": "lvlaksim1/max-desktop",
+  "authority": {
+    "manager_state_branch": "main",
+    "product_branch": "main"
+  },
+  "authoritative_branch": "main",
+  "discovery_branch": "main",
+  "branch_mode": "single",
+  "entrypoint": ".context/ENTRYPOINT.md",
+  "capsule_metadata": ".context/capsule.json",
+  "protocol": ".context/protocol.md",
+  "latest_handoff": ".context/handoffs/latest.md",
+  "project": {
+    "identity": ".context/project/identity.md",
+    "goals": ".context/project/goals.md",
+    "architecture": ".context/project/architecture.md",
+    "constraints": ".context/project/constraints.md"
+  },
+  "manager": {
+    "contract": ".context/manager/CONTRACT.md",
+    "protocol": ".context/manager/PROTOCOL.md",
+    "identity": ".context/manager/identity.json",
+    "mandate": ".context/manager/mandate.md",
+    "beliefs": ".context/manager/beliefs.md",
+    "goals": ".context/manager/goals.md",
+    "intentions": ".context/manager/intentions.md",
+    "plans": ".context/manager/plans.md",
+    "state_integrity": ".context/manager/state-integrity.json"
+  },
+  "memory": {
+    "index": ".context/memory/index.md",
+    "semantic": ".context/memory/semantic.md",
+    "procedural": ".context/memory/procedural.md",
+    "episodes": []
+  },
+  "current": {
+    "state": ".context/current/state.md",
+    "blockers": ".context/current/blockers.md",
+    "next": ".context/current/next.md"
+  },
+  "current_state": ".context/current/state.md",
+  "rules": [
+    ".context/rules/project-rules.md"
+  ],
+  "decisions": [],
+  "dialogues": [],
+  "history": [],
+  "runtime": {
+    "authoritative_paths": [],
+    "volatile": false,
+    "promote_semantic_changes_only": false,
+    "checkpoint_is_capsule_state": false
+  },
+  "sync_policy": {
+    "semantic_only": true,
+    "volatile_runtime_excluded": true,
+    "atomic_git_publication": true,
+    "provenance_required_for_manager_beliefs": true,
+    "working_views_non_authoritative": true,
+    "freshness_not_supersession": true,
+    "owner_directives_must_be_explicit": true,
+    "commitment_lifecycle_required": true,
+    "memory_writes_require_provenance": true,
+    "durable_finding_gate_required": true,
+    "reconcile_before_high_impact_action": true,
+    "self_authority_expansion_forbidden": true,
+    "service_expertise_not_project_authority": true,
+    "direct_owner_invocation_first_class": true,
+    "interactive_first_execution_required": true,
+    "autonomous_scheduler_fallback_only": true,
+    "task_scoped_live_carrier_required": true,
+    "scheduler_global_shutdown_on_owner_presence_forbidden": true,
+    "expired_live_carrier_fallback_supported": true,
+    "live_bounded_delegation_return_required": true,
+    "delegation_preserves_commitment_owner": true,
+    "explicit_handoff_required_for_responsibility_transfer": true,
+    "responsibility_authority_orthogonal": true,
+    "handoff_requires_target_acceptance": true,
+    "delegated_authority_attenuation_required": true,
+    "authority_root_provenance_required": true,
+    "subdelegation_inherits_constraints": true,
+    "owner_root_grant_normalized": true,
+    "first_delegation_attenuates_owner_grant": true,
+    "delegated_scope_attenuation_required": true,
+    "handoff_acceptance_target_home_verified": true,
+    "handoff_acceptance_execution_fence_bound": true,
+    "external_task_authority_non_escalating": true,
+    "supplied_execution_fence_enforced": true,
+    "evidence_backed_external_completion_required": true,
+    "terminal_execution_cleanup_required": true,
+    "external_gate_reconciliation_required": true,
+    "manager_state_coherence_required": true
+  },
+  "updated_at": "2026-10-25",
+  "context_version": "2.0.0-dev",
+  "context_capsule_version": "1.3.1",
+  "project_manager_version": "2.0.0-dev"
+}
