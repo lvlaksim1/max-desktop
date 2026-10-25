@@ -1,3 +1,6 @@
-# Procedural memory
+# Процедурная память — MAX Desktop
 
-Record learned procedures, reliable workflows, verification strategies, and operational techniques that should improve future manager performance.
+- Для проверки Windows/WPF-кода использовать `.github/workflows/ci.yml`, читать конкретные логи неуспешной сборки и исправлять ошибки компилятора до выпуска.
+- Для публикации исходников с нескольких файлов можно атомарно создать GitHub tree + commit + выполнить update_ref с expected_sha. После каждого изменения подтверждать head ветки.
+- Для выпуска Setup и Update использовать `.github/workflows/release.yml`: проверка версии, сборка, контроль теста, самостоятельная публикация и Inno Setup, затем GitHub Release. Сохранять лишь последний двоичный Release.
+- После любого изменения coupled-paths менеджера требуется обновить `.context/manager/state-integrity.json` вместе с теми файлами в одном атомарном коммите; использовать Git blob SHA-1, проверить marker против текущего дерева после публикации.

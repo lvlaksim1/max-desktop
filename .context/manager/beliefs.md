@@ -1,9 +1,8 @@
-# Manager beliefs
+# Проверенные сведения менеджера MAX Desktop
 
-Record current verified beliefs and explicit inferences about the project.
-
-Each durable belief must include at least:
-- statement;
-- `source:` where it came from;
-- `authority:` such as owner-directive, verified-repository, verified-ci, verified-runtime, trusted-external, or manager-inference;
-- whether it supersedes an older belief when applicable.
+- [Источник: GitHub, репозиторий `lvlaksim1/max-desktop`, основная ветка `main`, 26.10.2026] Проект создан через Repo Factory с отдельным Project Manager v2.
+- [Источник: исходный код `src/`, Windows GitHub Actions `40238392001`] Существуют три проекта .NET 8: WPF-интерфейс, библиотека протокола и агент обновления. Windows-сборка и проверка строгой границы протокола прошли.
+- [Источник: GitHub Actions `40238615264`, GitHub Release `v0.1.0`] Полный установщик и установщик обновления успешно собраны с Inno Setup и опубликованы как файлы выпуска. Обоим сопутствует правило «без прав администратора»; фактическая установка на пользовательском устройстве пока не проверена.
+- [Источник: `src/MaxDesktop.Protocol/Models.cs` и тест] `UnavailableMaxTransport` намеренно не выполняет вход, отправку или получение сообщений. Работоспособность MAX по сети НЕ подтверждена.
+- [Источник: `lvlaksim1/max-android-research`] Авторизация MAX изучена статически, но запись успешной авторизации собственного тестового аккаунта и работоспособный независимый транспорт ещё не получены.
+- [Источник: инструкция владельца в чате] Принципы установки, обновления и интерфейса должны повторять MailRu Desktop, но протокол и предметные формы MAX остаются самостоятельными.

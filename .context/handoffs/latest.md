@@ -1,15 +1,9 @@
-# Latest handoff
+# Передача состояния — MAX Desktop
 
-This is a convenience/emergency summary, not the primary manager continuity mechanism.
+Репозиторий `lvlaksim1/max-desktop`, ветка `main`. Идентичность менеджера сохраняется: `project-manager`.
 
-## Last completed work
+Выполнено: публикация исходного каркаса .NET 8/WPF, отдельного протокольного модуля, обновителя и двух Inno Setup установщиков. Windows CI 40238392001 и выпуск 40238615264 подтверждены успешными. Release v0.1.0 опубликован с Setup, Update, SHA-256.
 
-No handoff recorded yet.
+Не выдавать версию v0.1.0 за действующий клиент MAX: авторизация и переписки пока отключены. Не проводить очередную публикацию как «принятую» без доказательств приёмки на компьютере пользователя.
 
-## Verified current state
-
-Not yet captured.
-
-## Next operation
-
-Perform initial manager/project capture from the target repository.
+Продолжить с `.context/current/next.md` и `docs/architecture-baseline.md`.

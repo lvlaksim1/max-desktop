@@ -1,7 +1,15 @@
-# Manager intentions and commitments
+# Активные обязательства
 
-Record commitments using the Contract lifecycle:
+## I-001 — рабочий каркас и первый установочный выпуск
+- Источник: директивы владельца создать MAX Desktop по образцу MailRu Desktop и продолжить работу.
+- Статус: **completed** в части публикации кода, Windows-сборки и установщиков v0.1.0.
+- Доказательство: GitHub Actions `40238392001` и `40238615264` = success, GitHub Release `v0.1.0` содержит Setup, Update и SHA-256.
+- Не входит в статус completed: установка/запуск на пользовательском компьютере и подключение к MAX.
 
-`proposed → accepted/active → completed | cancelled | invalidated | superseded`
+## I-002 — приёмка установки и обновления
+- Статус: **active**, ожидание проверки установленной версии v0.1.0 на Windows и первой реальной проверки обновления при следующем выпуске.
+- Граница: не считать установку проверенной лишь из-за успешной сборки Inno Setup.
 
-Only accepted/active items are continuing manager responsibility. Record the verification basis for completion and the reason for cancellation, invalidation, or supersession when significant. An explicit statement that there are no active commitments is valid state once verified.
+## I-003 — реализация настоящей авторизации и переписок
+- Статус: **active**, протокольная интеграция не разрешается догадками из APK.
+- Требование: получить подтверждённую схему транспорта MAX на собственном тестовом аккаунте, затем внедрить вместо `UnavailableMaxTransport` и проверить живой сеанс.

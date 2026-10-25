@@ -1,5 +1,6 @@
-# Semantic memory
+# Семантическая память — MAX Desktop
 
-Record reusable durable knowledge and lessons that are broader than the current working state.
-
-Treat observed information as a candidate first. Admit it only when it has durable future value. Preserve source and authority when the memory could influence future decisions, revalidate it when freshness or risk matters, and revise it with confirm/supersede/conflict semantics rather than silent overwrite.
+- 26.10.2026, директива владельца: архитектурный образец MailRu Desktop по WPF, Inno Setup, обновлениям и принципам интерфейса; не переносить почтовый протокол.
+- 26.10.2026, GitHub Actions 40238392001: после исправления неоднозначных типов WPF/WindowsForms и импорта HttpRequestException проект корректно собирается в Windows.
+- 26.10.2026, GitHub Actions 40238615264: выпущены Setup/Update v0.1.0, сборка прошла. Отдельная приёмка реального запуска ещё необходима.
+- Данные протокола из max-android-research допускаются только с проверенным уровнем доказательности. Не включать фиктивные ответы транспорта.
