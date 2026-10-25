@@ -1,0 +1,27 @@
+name: MAX Desktop Windows build
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Directory.Build.props'
+      - '.github/workflows/ci.yml'
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build WPF app
+        run: dotnet build src/MaxDesktop.App/MaxDesktop.App.csproj -c Release
+      - name: Build update agent
+        run: dotnet build src/MaxDesktop.UpdateAgent/MaxDesktop.UpdateAgent.csproj -c Release
+      - name: Verify fail-closed transport
+        run: dotnet run --project tests/MaxDesktop.Protocol.Smoke/MaxDesktop.Protocol.Smoke.csproj -c Release
