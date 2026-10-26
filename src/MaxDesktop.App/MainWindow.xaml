@@ -11,7 +11,7 @@
        can initialise its independent WebSocket/TLS transport when requested. -->
   <wv:WebView2 x:Name="MaxEdgeChannel" Grid.Row="0" Width="2" Height="2"
                HorizontalAlignment="Left" VerticalAlignment="Top"
-               Opacity="0.01" IsHitTestVisible="False" Focusable="False"
+               IsHitTestVisible="False" Focusable="False"
                Panel.ZIndex="-1"/>
   <Border Grid.Row="0" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,0,1">
    <DockPanel Margin="18,9">
