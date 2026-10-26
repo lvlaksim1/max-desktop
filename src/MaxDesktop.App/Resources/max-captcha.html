@@ -3,56 +3,66 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src https://id.vk.ru https://id.vk.com; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src https://id.vk.ru https://id.vk.com; connect-src 'self' https://id.vk.ru https://id.vk.com; img-src 'self' data: https://id.vk.ru https://id.vk.com; base-uri 'none'; form-action 'none'">
+<link rel="stylesheet" href="captcha-sdk.css">
 <style>
-html,body{margin:0;padding:0;height:100%;background:#fff}
-iframe{border:0;width:100%;height:100%;display:block}
+html,body{margin:0;padding:0;min-height:100%;background:#f0f0f0;font-family:system-ui,Arial,sans-serif}
+#captcha{width:100%;min-height:420px;display:flex;justify-content:center;align-items:center}
 </style>
+<script src="captcha-sdk.js"></script>
 </head>
 <body>
-<iframe id="captcha" title="Проверка человека VK ID" referrerpolicy="origin"></iframe>
+<div id="captcha"></div>
 <script>
 "use strict";
 const bridge="max-captcha-1";
-const frame=document.getElementById("captcha");
 const origins=new Set(["https://id.vk.ru","https://id.vk.com"]);
-const allowedUrl=(url)=>{
-  try{
-    const u=new URL(url);
-    return u.protocol==="https:" && origins.has(u.origin) &&
-      u.pathname.includes("not_robot_captcha");
-  }catch{return false;}
-};
-function candidate(value){
-  if(typeof value==="string"){
-    try{return candidate(JSON.parse(value));}catch{return null;}
-  }
-  if(!value || typeof value!=="object")return null;
-  const status=String(value.type||value.event||value.status||"").toLowerCase();
-  if(status.includes("error") || status.includes("fail") || status.includes("cancel"))
-    return null;
-  const nested=[value,value.data,value.payload,value.result].filter(x=>x&&typeof x==="object");
-  for(const obj of nested){
-    for(const key of ["captchaToken","captcha_token","success_token","successToken"]){
-      if(typeof obj[key]==="string" && obj[key].length>=16 && obj[key].length<=8192)
-        return obj[key];
-    }
-    if((status.includes("success") || status.includes("captcha") || status.includes("solved")) &&
-       typeof obj.token==="string" && obj.token.length>=16 && obj.token.length<=8192)
-      return obj.token;
-  }
-  return null;
+let widget=null;
+let used=false;
+let launched=false;
+const send=(type,fields={})=>window.chrome.webview.postMessage({bridge,type,...fields});
+function allowedUrl(value){
+  try {
+    const uri=new URL(value);
+    return uri.protocol==="https:" && origins.has(uri.origin) &&
+      uri.pathname.includes("not_robot_captcha");
+  } catch { return false; }
 }
-window.addEventListener("message",(event)=>{
-  if(!origins.has(event.origin) || event.source!==frame.contentWindow)return;
-  const token=candidate(event.data);
-  if(token)window.chrome.webview.postMessage({bridge,type:"solved",token});
-});
+function safeError(err){
+  const text=String(err&&err.code||err&&err.message||err||"unknown").toLowerCase();
+  if(text.includes("expired"))return "token_expired";
+  if(text.includes("timeout"))return "timeout";
+  if(text.includes("network"))return "network";
+  return "captcha_sdk_error";
+}
+async function openCaptcha(link){
+  if(launched || !allowedUrl(link))return;
+  launched=true;
+  try {
+    if (!window.MaxDesktopCaptchaSdk ||
+        typeof window.MaxDesktopCaptchaSdk.CaptchaWidget!=="function") {
+      send("error",{code:"sdk_unavailable"});
+      return;
+    }
+    const {CaptchaWidget,CaptchaPublicEvents}=window.MaxDesktopCaptchaSdk;
+    widget=new CaptchaWidget();
+    widget.on(CaptchaPublicEvents.SUCCESS,({token})=>{
+      if(used || typeof token!=="string" || token.length<16 || token.length>8192)return;
+      used=true;
+      send("solved",{token});
+    });
+    // Use the public widget API: the SDK translates authenticated
+    // iframe messages to SUCCESS events. Do NOT listen to raw postMessage.
+    await widget.render({link,container:"#captcha"});
+    send("shown");
+  } catch(err) {
+    send("error",{code:safeError(err)});
+  }
+}
 window.chrome.webview.addEventListener("message",(event)=>{
   const data=event.data;
-  if(data && data.action==="open" && allowedUrl(data.url))
-    frame.src=data.url;
+  if(data && data.action==="open")void openCaptcha(data.url);
 });
-window.chrome.webview.postMessage({bridge,type:"ready"});
+send("ready");
 </script>
 </body></html>

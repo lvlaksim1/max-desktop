@@ -34,7 +34,8 @@ public partial class CaptchaWindow : Window
         try
         {
             string folder = Path.Combine(AppContext.BaseDirectory, "Resources");
-            if (!File.Exists(Path.Combine(folder, "max-captcha.html")))
+            if (!File.Exists(Path.Combine(folder, "max-captcha.html")) ||
+                !File.Exists(Path.Combine(folder, "captcha-sdk.js")))
                 throw new IOException("Страница проверки не установлена.");
 
             string dataFolder = Path.Combine(
@@ -86,6 +87,13 @@ public partial class CaptchaWindow : Window
                     CaptchaBrowser.CoreWebView2.PostWebMessageAsJson(
                         JsonSerializer.Serialize(new { action = "open", url = _challenge.AbsoluteUri }));
                     StatusLabel.Text = "Пройдите проверку в окне выше.";
+                    break;
+                case "shown":
+                    StatusLabel.Text = "Поставьте галочку в проверке VK ID.";
+                    break;
+                case "error":
+                    // Never display the challenge link or its token.
+                    StatusLabel.Text = "Не удалось завершить проверку VK ID. Отмените и повторите вход.";
                     break;
                 case "solved":
                     if (root.TryGetProperty("token", out var value) &&

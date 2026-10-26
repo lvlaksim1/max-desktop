@@ -26,6 +26,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Bundle pinned VK CAPTCHA SDK and test completion callback
+        shell: pwsh
+        run: |
+          npm install --prefix tools/captcha --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot install pinned VK CAPTCHA SDK build dependencies' }
+          npm run build --prefix tools/captcha
+          if ($LASTEXITCODE -ne 0) { throw 'VK CAPTCHA SDK bundling failed' }
+          npm run test --prefix tools/captcha
+          if ($LASTEXITCODE -ne 0) { throw 'CAPTCHA callback verification failed' }
       - name: Validate application version
         id: version
         shell: pwsh
@@ -61,6 +70,11 @@ jobs:
           if (-not (Test-Path $bridge)) { throw 'The Chromium WebSocket bridge is absent from the app publish folder' }
           $captchaBridge = Join-Path 'publish' 'Resources/max-captcha.html'
           if (-not (Test-Path $captchaBridge)) { throw 'The CAPTCHA browser bridge is absent from the app publish folder' }
+          foreach ($resource in @('captcha-sdk.js','captcha-sdk.css')) {
+            if (-not (Test-Path (Join-Path 'publish/Resources' $resource))) {
+              throw "The bundled VK CAPTCHA SDK resource $resource is absent from publish"
+            }
+          }
           dotnet publish src/MaxDesktop.UpdateAgent/MaxDesktop.UpdateAgent.csproj -c Release -r win-x64 --self-contained true -o updater-publish
           if ($LASTEXITCODE -ne 0) { throw 'Updater publish failed' }
           foreach ($name in @('MaxDesktop.UpdateAgent.exe','MaxDesktop.UpdateAgent.dll','MaxDesktop.UpdateAgent.runtimeconfig.json','MaxDesktop.UpdateAgent.deps.json')) {

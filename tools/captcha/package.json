@@ -1,0 +1,14 @@
+{
+  "name": "maxdesktop-captcha-build",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Build-time-only VK Captcha SDK bundle for MAX Desktop",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node tests/bridge.test.js"
+  },
+  "devDependencies": {
+    "@vkid/captcha": "2.0.0",
+    "esbuild": "0.25.12"
+  }
+}

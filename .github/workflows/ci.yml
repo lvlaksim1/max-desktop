@@ -19,6 +19,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Bundle pinned VK CAPTCHA SDK and test completion callback
+        shell: pwsh
+        run: |
+          npm install --prefix tools/captcha --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot install pinned VK CAPTCHA SDK build dependencies' }
+          npm run build --prefix tools/captcha
+          if ($LASTEXITCODE -ne 0) { throw 'VK CAPTCHA SDK bundling failed' }
+          npm run test --prefix tools/captcha
+          if ($LASTEXITCODE -ne 0) { throw 'CAPTCHA callback verification failed' }
       - name: Build WPF app
         run: dotnet build src/MaxDesktop.App/MaxDesktop.App.csproj -c Release
       - name: Build update agent
