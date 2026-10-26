@@ -22,12 +22,16 @@ jobs:
       - name: Bundle pinned VK CAPTCHA SDK and test completion callback
         shell: pwsh
         run: |
-          npm install --prefix tools/captcha --ignore-scripts --no-audit --no-fund
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot install pinned VK CAPTCHA SDK build dependencies' }
-          npm run build --prefix tools/captcha
-          if ($LASTEXITCODE -ne 0) { throw 'VK CAPTCHA SDK bundling failed' }
-          npm run test --prefix tools/captcha
-          if ($LASTEXITCODE -ne 0) { throw 'CAPTCHA callback verification failed' }
+          Push-Location tools/captcha
+          try {
+            npm install --ignore-scripts --no-audit --no-fund
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot install pinned VK CAPTCHA SDK build dependencies' }
+            npm run build
+            if ($LASTEXITCODE -ne 0) { throw 'VK CAPTCHA SDK bundling failed' }
+            npm run test
+            if ($LASTEXITCODE -ne 0) { throw 'CAPTCHA callback verification failed' }
+          }
+          finally { Pop-Location }
       - name: Build WPF app
         run: dotnet build src/MaxDesktop.App/MaxDesktop.App.csproj -c Release
       - name: Build update agent
