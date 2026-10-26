@@ -115,17 +115,21 @@ jobs:
           $full = "dist/MaxDesktop_Setup_v$v.exe"
           $update = "dist/MaxDesktop_Update_v$v.exe"
           if (-not (Test-Path $full) -or -not (Test-Path $update)) { throw 'Missing installer files' }
-          # External CLI commands don't emit a PowerShell Boolean. Check their
-          # exit status; suppressing stdout otherwise always evaluates false.
+          # Release notes are versioned in Git, not frozen to the prior version.
+          # A rerun may fix notes, but must not replace a verified installer.
+          $notesFile = "docs/release-notes/$tag.md"
+          if (-not (Test-Path $notesFile)) { throw "Missing versioned release notes: $notesFile" }
           gh release view $tag --repo $env:GITHUB_REPOSITORY --json tagName *> $null
           if ($LASTEXITCODE -eq 0) {
-            Write-Output "Release $tag already exists; not overwriting files"
+            gh release edit $tag --repo $env:GITHUB_REPOSITORY --notes-file $notesFile
+            if ($LASTEXITCODE -ne 0) { throw "Cannot update release notes for $tag" }
+            Write-Output "Release $tag already exists; notes updated, binaries preserved"
             exit 0
           }
           $digest = (Get-FileHash $update -Algorithm SHA256).Hash.ToLowerInvariant()
           "$digest  MaxDesktop_Update_v$v.exe" | Set-Content -Encoding ASCII "$update.sha256"
-          $notes = 'MAX Desktop v0.1.17: исправлен аварийный выход приложения при открытии служебного чата 0. Вместо запроса истории с недопустимым идентификатором выводится сообщение о неподдерживаемом служебном чате. Добавлено хранение нескольких учётных записей MAX в отдельном зашифрованном DPAPI-хранилище Windows, список учётных записей, добавление, переключение и удаление отдельного аккаунта с компьютера с подтверждением. Ранее авторизованный аккаунт автоматически переносится из прежнего DPAPI-файла без повторного SMS; старый файл сохраняется для совместимости с предыдущим выпуском до явного удаления аккаунта. Переключение восстанавливает сохранённый сеанс выбранного аккаунта, переписки разных аккаунтов не смешиваются, при ошибке переключения действующая сессия сохраняется. Windows CI и автономные проверки миграции, изоляции токенов, удаления и защиты от повреждённого хранилища прошли. Приёмка нескольких реальных аккаунтов на ПК владельца остаётся открытой. Отправка сообщений пока отключена. Системный VPN не меняется.'
-          gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes $notes --latest
+
+          gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes-file $notesFile --latest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publish failed' }
           $prior = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
           foreach ($item in $prior) {
