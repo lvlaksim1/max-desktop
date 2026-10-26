@@ -17,6 +17,17 @@ public partial class LoginWindow : Window
         _transport = transport;
     }
 
+    private void ApplyTransportPreference()
+    {
+        if (_transport is not HybridMaxTransport hybrid) return;
+        hybrid.PreferredMode = TransportPicker.SelectedIndex switch
+        {
+            1 => MaxConnectionPreference.WebSocket,
+            2 => MaxConnectionPreference.Tcp,
+            _ => MaxConnectionPreference.Automatic
+        };
+    }
+
     private async void SendCode_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -24,6 +35,7 @@ public partial class LoginWindow : Window
         StatusText.Text = "Подключение к MAX и запрос кода...";
         try
         {
+            ApplyTransportPreference();
             var result = await _transport.BeginLoginAsync(PhoneBox.Text.Trim(), _operationCancel!.Token);
             ShowResult(result);
         }
@@ -41,6 +53,7 @@ public partial class LoginWindow : Window
         StatusText.Text = "Проверка TCP, TLS и начального соединения без номера телефона...";
         try
         {
+            ApplyTransportPreference();
             var result = await _transport.ProbeConnectionAsync(_operationCancel!.Token);
             StatusText.Text = result.Error ?? "Проверка завершена.";
         }

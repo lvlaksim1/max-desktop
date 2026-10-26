@@ -13,7 +13,7 @@ namespace MaxDesktop.App;
 public partial class MainWindow : Window
 {
     private readonly UserSettings _settings;
-    private readonly IMaxAuthenticationTransport _transport = new NativeMaxTransport(new ProtectedMaxSessionStore());
+    private readonly IMaxAuthenticationTransport _transport = new HybridMaxTransport(new ProtectedMaxSessionStore());
     private readonly ObservableCollection<ChatSummary> _chats = new();
     private readonly ObservableCollection<ChatMessage> _messages = new();
 

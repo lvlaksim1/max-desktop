@@ -19,6 +19,13 @@
    <TextBlock Text="Номер телефона" Margin="0,0,0,7"/>
    <TextBox x:Name="PhoneBox" Height="37" VerticalContentAlignment="Center"
             ToolTip="Введите номер в формате +79991234567"/>
+   <TextBlock Text="Способ подключения" Margin="0,10,0,7"/>
+   <ComboBox x:Name="TransportPicker" Height="34" SelectedIndex="0"
+             ToolTip="WebSocket использует WEB-протокол. TCP — прежний мобильный транспорт. QR не используется.">
+    <ComboBoxItem Content="Автоматически (сначала WebSocket)"/>
+    <ComboBoxItem Content="WebSocket (веб-протокол)"/>
+    <ComboBoxItem Content="TCP (мобильный протокол)"/>
+   </ComboBox>
    <Button x:Name="SendCodeButton" Content="Получить код" HorizontalAlignment="Stretch"
            Margin="0,11,0,0" Click="SendCode_Click"/>
    <Button x:Name="TestConnectionButton" Content="Проверить соединение (без номера)" HorizontalAlignment="Stretch"
