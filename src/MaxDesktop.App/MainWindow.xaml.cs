@@ -18,6 +18,13 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<ChatMessage> _messages = new();
     private CancellationTokenSource? _chatRefreshCancellation;
     private int _chatRefreshGeneration;
+    private CancellationTokenSource? _historyCancellation;
+    private int _historyGeneration;
+    private bool _historyLoading;
+    private bool _historyHasMore;
+    private long? _historyBefore;
+    private long? _historyChatId;
+    private readonly HashSet<long> _historyIds = new();
 
     public MainWindow()
     {
@@ -84,6 +91,7 @@ public partial class MainWindow : Window
             _settings.ChatPaneWidth = ChatColumn.ActualWidth;
             SettingsStore.Save(_settings);
             _chatRefreshCancellation?.Cancel();
+            _historyCancellation?.Cancel();
             _transport.Dispose();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -133,6 +141,7 @@ public partial class MainWindow : Window
             ? "Выберите чат из списка"
             : "Выберите чат после подключения аккаунта";
         _chatRefreshCancellation?.Cancel();
+        ResetHistory();
         _chats.Clear();
         _messages.Clear();
         RefreshChatsButton.IsEnabled = connected;
@@ -196,18 +205,120 @@ public partial class MainWindow : Window
 
     private async void ChatList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        ResetHistory();
         if (ChatList.SelectedItem is not ChatSummary chat)
         {
             ConversationTitle.Text = "Переписка не выбрана";
-            MessageList.Visibility = Visibility.Collapsed;
-            EmptyConversation.Visibility = Visibility.Visible;
+            ConversationHint.Text = "Выберите чат из списка";
             return;
         }
+        _historyChatId = chat.Id;
         ConversationTitle.Text = chat.Title;
+        ConversationHint.Text = "Загружаю последние сообщения...";
+        await LoadHistoryPageAsync(older: false);
+    }
+
+    private void ResetHistory()
+    {
+        _historyCancellation?.Cancel();
+        ++_historyGeneration;
+        _historyLoading = false;
+        _historyHasMore = false;
+        _historyBefore = null;
+        _historyChatId = null;
+        _historyIds.Clear();
         _messages.Clear();
-        ConversationHint.Text = "История сообщений — следующий этап разработки.";
-        MessageList.Visibility = Visibility.Collapsed;
-        EmptyConversation.Visibility = Visibility.Visible;
+        if (MessageList is not null) MessageList.Visibility = Visibility.Collapsed;
+        if (EmptyConversation is not null) EmptyConversation.Visibility = Visibility.Visible;
+        if (LoadOlderMessagesButton is not null)
+        {
+            LoadOlderMessagesButton.IsEnabled = false;
+            LoadOlderMessagesButton.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async void LoadOlderMessages_Click(object sender, RoutedEventArgs e) =>
+        await LoadHistoryPageAsync(older: true);
+
+    private void MessageList_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        // Only a genuine upward scroll triggers auto-pagination. Initial
+        // layout and the first render must not drain the entire history.
+        if (e.OriginalSource is ScrollViewer && e.VerticalChange < 0 &&
+            e.VerticalOffset <= 4 && _historyHasMore && !_historyLoading)
+            _ = LoadHistoryPageAsync(older: true);
+    }
+
+    private async Task LoadHistoryPageAsync(bool older)
+    {
+        if (_historyChatId is not long chatId || _historyLoading ||
+            (older && (!_historyHasMore || _historyBefore is null)))
+            return;
+
+        _historyLoading = true;
+        int generation = _historyGeneration;
+        long? previousCursor = _historyBefore;
+        var cancellation = new CancellationTokenSource();
+        _historyCancellation = cancellation;
+        LoadOlderMessagesButton.IsEnabled = false;
+        try
+        {
+            ChatHistoryPage page = await _transport.GetHistoryPageAsync(
+                chatId, older ? previousCursor : null,
+                MaxHistoryCodec.PageSize, cancellation.Token);
+            if (generation != _historyGeneration || _historyChatId != chatId ||
+                cancellation.IsCancellationRequested)
+                return;
+
+            int added = 0;
+            // Both transports return messages oldest-first.
+            foreach (var item in page.Messages)
+            {
+                if (!_historyIds.Add(item.Id)) continue;
+                if (older) _messages.Insert(added, item);
+                else _messages.Add(item);
+                added++;
+            }
+            _historyBefore = page.NextBefore;
+            _historyHasMore = page.HasMore &&
+                page.NextBefore is { } next &&
+                (!older || (previousCursor.HasValue && next < previousCursor.Value)) &&
+                added > 0;
+            LoadOlderMessagesButton.Visibility =
+                _historyHasMore ? Visibility.Visible : Visibility.Collapsed;
+            MessageList.Visibility = _messages.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            EmptyConversation.Visibility = _messages.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+            ConversationHint.Text = _messages.Count == 0
+                ? "Сервер вернул пустую историю."
+                : $"Сообщений загружено: {_messages.Count}. Только чтение.";
+            StatusLabel.Text = _messages.Count == 0
+                ? "В выбранном чате сервер не вернул сообщений."
+                : $"История загружена: {_messages.Count} сообщений.";
+            if (!older && _messages.Count > 0)
+                MessageList.ScrollIntoView(_messages[^1]);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or
+            InvalidOperationException or TimeoutException or OperationCanceledException or
+            NotSupportedException)
+        {
+            if (generation == _historyGeneration && _historyChatId == chatId)
+            {
+                ConversationHint.Text = "Ошибка загрузки истории. Выберите чат ещё раз.";
+                StatusLabel.Text = "Ошибка истории: " + ex.Message;
+            }
+        }
+        finally
+        {
+            if (generation == _historyGeneration)
+            {
+                _historyLoading = false;
+                LoadOlderMessagesButton.IsEnabled = _historyHasMore;
+                if (ReferenceEquals(_historyCancellation, cancellation))
+                    _historyCancellation = null;
+            }
+            cancellation.Dispose();
+        }
     }
 
     private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
