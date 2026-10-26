@@ -1,9 +1,9 @@
 namespace MaxDesktop.Protocol;
 
-public enum ConnectionState { Disconnected, Connecting, AwaitingVerification, AwaitingPassword, Connected, Failed }
+public enum ConnectionState { Disconnected, Connecting, AwaitingVerification, AwaitingPassword, AwaitingCaptcha, Connected, Failed }
 public sealed record ChatSummary(long Id, string Title, string Preview, int UnreadCount);
 public sealed record ChatMessage(long Id, long ChatId, string Sender, string Text, DateTimeOffset SentAt);
-public sealed record AuthResult(ConnectionState State, string? Error, int? CodeLength = null, string? PasswordHint = null);
+public sealed record AuthResult(ConnectionState State, string? Error, int? CodeLength = null, string? PasswordHint = null, string? CaptchaUrl = null);
 
 
 public sealed record MaxSavedSession(string Phone, string LoginToken, string DeviceId, string InstanceId, string Transport = "TCP");
@@ -22,6 +22,9 @@ public interface IMaxAuthenticationTransport : IMaxTransport, IDisposable
     Task<AuthResult> ProbeConnectionAsync(CancellationToken cancellationToken = default);
     Task<AuthResult> VerifyPasswordAsync(string password, CancellationToken cancellationToken = default);
     Task LogoutAsync(CancellationToken cancellationToken = default);
+    Task<AuthResult> CompleteCaptchaAsync(string captchaToken, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new AuthResult(ConnectionState.Failed, "Проверка человека этим способом входа не поддерживается."));
+    Task CancelPendingLoginAsync() => Task.CompletedTask;
     string? CurrentPhone { get; }
 }
 

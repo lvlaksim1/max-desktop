@@ -20,6 +20,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
     private const int CheckCodeOpcode = 18;
     private const int LoginOpcode = 19;
     private const int CheckPasswordOpcode = 115;
+    private const int CaptchaRequestOpcode = 224;
     private const int MaxFrameSize = 2 * 1024 * 1024;
     private const string WebUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -38,6 +39,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
     private string? _instanceId;
     private string? _verificationToken;
     private string? _passwordTrack;
+    private string? _captchaLink;
 
     public NativeMaxWebSocketTransport(IMaxSessionStore sessionStore,
         IMaxWebSocketChannel? channel = null, string transportTag = "WEB")
@@ -56,7 +58,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
         try
         {
             EnsureNotDisposed();
-            if (State is ConnectionState.AwaitingVerification or ConnectionState.AwaitingPassword or ConnectionState.Connected)
+            if (State is ConnectionState.AwaitingVerification or ConnectionState.AwaitingPassword or ConnectionState.AwaitingCaptcha or ConnectionState.Connected)
                 return new AuthResult(State, "Нельзя проверить соединение во время активной авторизации.");
 
             try
@@ -95,25 +97,113 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
             try
             {
                 await OpenAndInitializeAsync(_deviceId, cancellationToken);
-                var response = await RequestAsync(RequestSmsOpcode, new
+                MaxWebSocketFrame response;
+                try
                 {
-                    phone = phoneNumber,
-                    type = "START_AUTH",
-                    language = "ru"
-                }, cancellationToken);
-                _verificationToken = GetString(response.Payload, "token");
-                if (string.IsNullOrEmpty(_verificationToken))
-                    throw new InvalidDataException("В ответе MAX отсутствует токен проверки номера.");
-
-                int? codeLength = GetInt(response.Payload, "codeLength");
-                State = ConnectionState.AwaitingVerification;
-                return new AuthResult(State, null, codeLength);
+                    response = await RequestAsync(RequestSmsOpcode, new
+                    {
+                        phone = phoneNumber,
+                        type = "START_AUTH",
+                        language = "ru"
+                    }, cancellationToken);
+                }
+                catch (MaxWebSocketServerException ex) when (ex.RequiresCaptcha)
+                {
+                    // The server explicitly rejected the SMS request. Request a
+                    // human verification challenge; do not send another SMS yet.
+                    var challenge = await RequestAsync(CaptchaRequestOpcode, new
+                    {
+                        source = "auth",
+                        identifier = phoneNumber
+                    }, cancellationToken);
+                    string? link = GetString(challenge.Payload, "link");
+                    if (!IsApprovedCaptchaLink(link))
+                        throw new InvalidDataException("MAX не вернул допустимый адрес проверки человека.");
+                    _captchaLink = link;
+                    State = ConnectionState.AwaitingCaptcha;
+                    return new AuthResult(State, "MAX запросил проверку «я не робот».",
+                        CaptchaUrl: link);
+                }
+                return AcceptSmsResponse(response);
             }
             catch (Exception ex) when (IsConnectionException(ex))
             {
                 State = ConnectionState.Failed;
                 await DisconnectAsync();
                 return new AuthResult(State, SafeError(ex));
+            }
+        }
+        finally { _authGate.Release(); }
+    }
+
+
+    private AuthResult AcceptSmsResponse(MaxWebSocketFrame response)
+    {
+        _verificationToken = GetString(response.Payload, "token");
+        if (string.IsNullOrEmpty(_verificationToken))
+            throw new InvalidDataException("В ответе MAX отсутствует токен проверки номера.");
+        _captchaLink = null;
+        int? codeLength = GetInt(response.Payload, "codeLength");
+        State = ConnectionState.AwaitingVerification;
+        return new AuthResult(State, null, codeLength);
+    }
+
+    private static bool IsApprovedCaptchaLink(string? link) =>
+        Uri.TryCreate(link, UriKind.Absolute, out Uri? uri) &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        (uri.Host.Equals("id.vk.ru", StringComparison.OrdinalIgnoreCase) ||
+         uri.Host.Equals("id.vk.com", StringComparison.OrdinalIgnoreCase)) &&
+        uri.AbsolutePath.Contains("not_robot_captcha", StringComparison.OrdinalIgnoreCase);
+
+    public async Task<AuthResult> CompleteCaptchaAsync(
+        string captchaToken, CancellationToken cancellationToken = default)
+    {
+        await _authGate.WaitAsync(cancellationToken);
+        try
+        {
+            EnsureNotDisposed();
+            if (State != ConnectionState.AwaitingCaptcha ||
+                string.IsNullOrEmpty(_phone) || string.IsNullOrEmpty(_captchaLink) ||
+                !_channel.IsOpen)
+                return new AuthResult(ConnectionState.Failed,
+                    "Нет активной проверки человека. Начните вход заново.");
+            if (string.IsNullOrWhiteSpace(captchaToken) || captchaToken.Length > 8192)
+                return new AuthResult(State, "Не получено подтверждение проверки человека.");
+            try
+            {
+                // Only the user's completed CAPTCHA response may trigger this
+                // single, deliberate post-challenge request for a code.
+                var response = await RequestAsync(RequestSmsOpcode, new
+                {
+                    phone = _phone,
+                    type = "START_AUTH",
+                    language = "ru",
+                    captchaToken
+                }, cancellationToken);
+                return AcceptSmsResponse(response);
+            }
+            catch (Exception ex) when (IsConnectionException(ex))
+            {
+                State = ConnectionState.Failed;
+                await DisconnectAsync();
+                return new AuthResult(State, SafeError(ex));
+            }
+        }
+        finally { _authGate.Release(); }
+    }
+
+    public async Task CancelPendingLoginAsync()
+    {
+        await _authGate.WaitAsync();
+        try
+        {
+            if (State == ConnectionState.AwaitingCaptcha)
+            {
+                _captchaLink = null;
+                _verificationToken = null;
+                _phone = null;
+                await DisconnectAsync();
+                State = ConnectionState.Disconnected;
             }
         }
         finally { _authGate.Release(); }
@@ -294,6 +384,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
             {
                 InitOpcode => "WS_INIT",
                 RequestSmsOpcode => "WS_AUTH_REQUEST",
+                CaptchaRequestOpcode => "WS_CAPTCHA_REQUEST",
                 CheckCodeOpcode => "WS_CHECK_CODE",
                 CheckPasswordOpcode => "WS_CHECK_PASSWORD",
                 LoginOpcode => "WS_LOGIN",
@@ -314,7 +405,8 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
                 if (response.Sequence != seq || response.Opcode != opcode)
                     continue;
                 if (response.Command == 3)
-                    throw new MaxWebSocketServerException(ServerMessage(response.Payload));
+                    throw new MaxWebSocketServerException(
+                        ServerMessage(response.Payload), GetString(response.Payload, "error"));
                 if (response.Command != 1)
                     throw new InvalidDataException("MAX вернул неожиданный тип WebSocket-ответа.");
                 return response;
@@ -400,6 +492,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
             await DisconnectAsync();
             _verificationToken = null;
             _passwordTrack = null;
+            _captchaLink = null;
             _phone = null;
             _sessionStore.Delete();
             State = ConnectionState.Disconnected;
@@ -430,6 +523,15 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
 
     private sealed class MaxWebSocketServerException : IOException
     {
-        public MaxWebSocketServerException(string message) : base(message) { }
+        public MaxWebSocketServerException(string message, string? code) : base(message)
+        {
+            RequiresCaptcha =
+                message.Contains("Проверка не пройдена", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("капч", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("robot", StringComparison.OrdinalIgnoreCase) ||
+                (code?.Contains("captcha", StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (code?.Contains("robot", StringComparison.OrdinalIgnoreCase) ?? false);
+        }
+        public bool RequiresCaptcha { get; }
     }
 }

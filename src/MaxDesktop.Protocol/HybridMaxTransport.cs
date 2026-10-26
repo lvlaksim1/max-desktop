@@ -99,6 +99,11 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
         throw new InvalidOperationException("Нет доступного транспорта MAX.");
     }
 
+    public Task<AuthResult> CompleteCaptchaAsync(string captchaToken, CancellationToken cancellationToken = default) =>
+        _active.CompleteCaptchaAsync(captchaToken, cancellationToken);
+
+    public Task CancelPendingLoginAsync() => _active.CancelPendingLoginAsync();
+
     public Task<AuthResult> VerifyCodeAsync(string verificationCode, CancellationToken cancellationToken = default) =>
         _active.VerifyCodeAsync(verificationCode, cancellationToken);
     public Task<AuthResult> VerifyPasswordAsync(string password, CancellationToken cancellationToken = default) =>
