@@ -55,6 +55,8 @@ jobs:
         run: |
           dotnet publish src/MaxDesktop.App/MaxDesktop.App.csproj -c Release -r win-x64 --self-contained true -o publish
           if ($LASTEXITCODE -ne 0) { throw 'Application publish failed' }
+          $bridge = Join-Path 'publish' 'Resources/max-bridge.html'
+          if (-not (Test-Path $bridge)) { throw 'The Chromium WebSocket bridge is absent from the app publish folder' }
           dotnet publish src/MaxDesktop.UpdateAgent/MaxDesktop.UpdateAgent.csproj -c Release -r win-x64 --self-contained true -o updater-publish
           if ($LASTEXITCODE -ne 0) { throw 'Updater publish failed' }
           foreach ($name in @('MaxDesktop.UpdateAgent.exe','MaxDesktop.UpdateAgent.dll','MaxDesktop.UpdateAgent.runtimeconfig.json','MaxDesktop.UpdateAgent.deps.json')) {
