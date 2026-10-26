@@ -9,3 +9,6 @@
 - `installer/full.iss`, `installer/update.iss`: установка и обновление для текущего пользователя в `%LOCALAPPDATA%\Programs\MaxDesktop`. Настройки/данные в `%LOCALAPPDATA%\MaxDesktop`.
 - `tests/` и `.github/workflows/`: Windows CI, проверка кадрирования TCP, WEB JSON, имитация SMS, отдельная анонимная проверка доступности WebSocket, проверки обновителя. GitHub Release хранит только последний Setup/Update/SHA-256.
 - **Ограничения фактической приёмки:** TLS/WS не работает с машины пользователя даже в обычном браузере и `curl.exe`; реальная отправка SMS и LOGIN не приняты, чаты и сообщения не интегрированы. CI из других сетей не доказывает работоспособность.
+
+- v0.1.10: в WEB-транспорт добавлено состояние AwaitingCaptcha, явное получение ссылки CAPTCHA_REQUEST(224) после серверного отказа при START_AUTH(17), WPF CaptchaWindow на WebView2 с локальным max-captcha.html и проверкой источника сообщений, token после ручного решения передаётся через CompleteCaptchaAsync в следующий SMS запрос. CancelPendingLoginAsync сбрасывает запрос без автоматического повторения SMS. Токены проверки и ссылки не записываются в диагностику.
+- Авторизация остаётся через PhysicalMaxWebSocketChannel первым в автоматическом выборе при включённом и неизменном системном VPN. QR не добавляется.
