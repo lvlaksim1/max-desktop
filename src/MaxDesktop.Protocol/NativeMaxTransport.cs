@@ -54,6 +54,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     private int _tlsAttemptCount;
     private string _lastTriedHost = "api2.oneme.ru";
     private string? _connectedHost;
+    private string _endpointDiagnostics = "";
     // These markers never contain a phone, verification code or authorization token.
     private string _connectionPhase = "ОЖИДАНИЕ";
     public string LastConnectionPhase => _connectionPhase;
@@ -333,6 +334,8 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     {
         _connectionPhase = "DNS_RESOLVE";
         _connectedHost = null;
+        _endpointDiagnostics = "";
+        var results = new Dictionary<string, string>(StringComparer.Ordinal);
         var addresses = new List<(string Host, IPAddress Ip)>();
 
         // Visit different verified service domains BEFORE retrying the same
@@ -416,10 +419,21 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                 candidateSsl?.Dispose();
                 candidate.Dispose();
                 lastFailure = ex;
+                Exception root = ex.GetBaseException();
+                string category = ex is OperationCanceledException ? "ТАЙМ-АУТ" :
+                    _connectionPhase == "TCP_CONNECT" ? "TCP" :
+                    root.Message.Contains("EOF", StringComparison.OrdinalIgnoreCase) ? "EOF" :
+                    _tlsCertificateSeen && !_tlsCertificateTrusted ? "СЕРТИФИКАТ" :
+                    root.GetType().Name;
+                // No network addresses, account identifiers or exception text.
+                results[hostname] = category;
             }
         }
 
         // Keep original EOF / certificate failure for privacy-safe diagnosis.
+        _endpointDiagnostics = string.Join("; ",
+            VerifiedHosts.Where(results.ContainsKey)
+                .Select(host => host + "=" + results[host]));
         throw new IOException(
             $"Все {_tlsAttemptCount} попыток подключения к трём проверенным узлам MAX завершились неудачно.",
             lastFailure);
@@ -556,9 +570,9 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                     : "Сертификат сервера ещё не был получен."
                 : "Транспортный поток закрылся до завершения запроса.";
             return $"Этап {_connectionPhase}: TLS/TCP-соединение оборвано (EOF). {detail} " +
-                   $"Последний узел: {_lastTriedHost}. Попыток подключения: {_tlsAttemptCount}. Номер телефона и код здесь не проверялись.";
+                   $"Последний узел: {_lastTriedHost}. Попыток подключения: {_tlsAttemptCount}. {_endpointDiagnostics} Номер телефона и код здесь не проверялись.";
         }
-        return $"Этап {_connectionPhase}, узел {_lastTriedHost}, попыток {_tlsAttemptCount}: {SafeError(ex)}";
+        return $"Этап {_connectionPhase}, попыток {_tlsAttemptCount}. {_endpointDiagnostics} {SafeError(ex)}";
     }
 
     private static string SafeError(Exception ex)
