@@ -29,6 +29,7 @@ public sealed class ProtectedMaxAccountVault
 
     private sealed class VaultDocument
     {
+        public VaultDocument() { }
         public int FormatVersion { get; set; } = 1;
         public bool LegacyImported { get; set; }
         public string? ActivePhone { get; set; }

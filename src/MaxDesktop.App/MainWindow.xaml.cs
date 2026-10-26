@@ -13,7 +13,12 @@ namespace MaxDesktop.App;
 public partial class MainWindow : Window
 {
     private readonly UserSettings _settings;
-    private readonly IMaxAuthenticationTransport _transport;
+    private readonly ProtectedMaxAccountVault _vault;
+    private IMaxAuthenticationTransport _transport;
+    private readonly ObservableCollection<string> _accounts = new();
+    private bool _ignoreAccountSelection;
+    private bool _accountOperation;
+    private string? _currentAccountPhone;
     private readonly ObservableCollection<ChatSummary> _chats = new();
     private readonly ObservableCollection<ChatMessage> _messages = new();
     private CancellationTokenSource? _chatRefreshCancellation;
@@ -31,9 +36,9 @@ public partial class MainWindow : Window
         _settings = SettingsStore.Load();
         SettingsStore.ApplyTheme(_settings);
         InitializeComponent();
-        _transport = new HybridMaxTransport(
-            new ProtectedMaxSessionStore(),
-            new EdgeMaxWebSocketChannel(MaxEdgeChannel));
+        _vault = new ProtectedMaxAccountVault();
+        _transport = CreateTransport(null);
+        AccountList.ItemsSource = _accounts;
         ChatList.ItemsSource = _chats;
         MessageList.ItemsSource = _messages;
         Title = "MAX Desktop — v" + typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
@@ -56,14 +61,22 @@ public partial class MainWindow : Window
             Left = left;
             Top = top;
         }
-        StatusLabel.Text = "Восстановление сессии MAX...";
+        StatusLabel.Text = "Восстановление сохранённых аккаунтов MAX...";
         try
         {
-            ApplyAuthResult(await _transport.RestoreSessionAsync());
+            RefreshAccountList();
+            string? active = _vault.ActivePhone;
+            if (active is not null)
+                await SwitchAccountAsync(active);
+            else
+                ApplyAuthResult(new AuthResult(ConnectionState.Disconnected, null));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or
+            System.Security.Cryptography.CryptographicException or UnauthorizedAccessException)
         {
-            StatusLabel.Text = "Не удалось восстановить сеанс MAX: " + ex.GetType().Name;
+            // Never overwrite a damaged encrypted vault with an empty one.
+            StatusLabel.Text = "Не удалось прочитать защищённое хранилище: " + ex.GetType().Name;
+            AddAccountButton.IsEnabled = false;
         }
     }
 
@@ -106,26 +119,169 @@ public partial class MainWindow : Window
         dialog.ShowDialog();
     }
 
+
+    private IMaxAuthenticationTransport CreateTransport(string? phone) =>
+        new HybridMaxTransport(_vault.Slot(phone),
+            new EdgeMaxWebSocketChannel(MaxEdgeChannel));
+
+    private void RefreshAccountList()
+    {
+        _ignoreAccountSelection = true;
+        try
+        {
+            _accounts.Clear();
+            foreach (string phone in _vault.Phones()) _accounts.Add(phone);
+            AccountList.SelectedItem = _currentAccountPhone;
+            RemoveAccountButton.IsEnabled = AccountList.SelectedItem is string;
+        }
+        finally { _ignoreAccountSelection = false; }
+    }
+
+    private void SetAccountButtons(bool enabled)
+    {
+        AddAccountButton.IsEnabled = enabled;
+        AccountList.IsEnabled = enabled;
+        RemoveAccountButton.IsEnabled = enabled && AccountList.SelectedItem is string;
+    }
+
     private void AddAccount_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new LoginWindow(_transport) { Owner = this };
-        if (dialog.ShowDialog() == true)
+        if (_accountOperation) return;
+        // Use a fresh transport and session slot: a failed/cancelled login
+        // cannot revoke the currently active account's stored credentials.
+        var candidate = CreateTransport(null);
+        bool adopted = false;
+        _accountOperation = true;
+        SetAccountButtons(false);
+        try
+        {
+            var dialog = new LoginWindow(candidate) { Owner = this };
+            if (dialog.ShowDialog() != true) return;
+            string phone = candidate.CurrentPhone ??
+                throw new InvalidOperationException("MAX не вернул номер подтверждённого аккаунта.");
+            _vault.Activate(phone);
+            _chatRefreshCancellation?.Cancel();
+            ResetHistory();
+            var previous = _transport;
+            _transport = candidate;
+            _currentAccountPhone = phone;
+            adopted = true;
+            previous.Dispose();
+            RefreshAccountList();
             ApplyAuthResult(new AuthResult(ConnectionState.Connected, null));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or
+            InvalidOperationException or System.Security.Cryptography.CryptographicException)
+        {
+            StatusLabel.Text = "Не удалось добавить аккаунт: " + ex.Message;
+        }
+        finally
+        {
+            if (!adopted) candidate.Dispose();
+            _accountOperation = false;
+            SetAccountButtons(true);
+        }
+    }
+
+    private async void AccountList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_ignoreAccountSelection || _accountOperation ||
+            AccountList.SelectedItem is not string phone ||
+            phone == _currentAccountPhone)
+            return;
+        await SwitchAccountAsync(phone);
+    }
+
+    private async Task SwitchAccountAsync(string phone)
+    {
+        if (_accountOperation) return;
+        _accountOperation = true;
+        SetAccountButtons(false);
+        IMaxAuthenticationTransport? next = null;
+        bool adopted = false;
+        try
+        {
+            // Authenticate the target session before disposing the working one.
+            next = CreateTransport(phone);
+            StatusLabel.Text = "Подключаю выбранный аккаунт MAX...";
+            AuthResult result = await next.RestoreSessionAsync();
+            if (result.State != ConnectionState.Connected)
+            {
+                StatusLabel.Text = "Не удалось подключить аккаунт: " +
+                    (result.Error ?? "Сервер не подтвердил сохранённый сеанс.");
+                return;
+            }
+            _vault.Activate(phone);
+            _chatRefreshCancellation?.Cancel();
+            ResetHistory();
+            var previous = _transport;
+            _transport = next;
+            _currentAccountPhone = phone;
+            adopted = true;
+            previous.Dispose();
+            RefreshAccountList();
+            ApplyAuthResult(result);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or
+            InvalidOperationException or System.Security.Cryptography.CryptographicException or
+            ObjectDisposedException)
+        {
+            StatusLabel.Text = "Ошибка переключения аккаунта: " + ex.GetType().Name;
+        }
+        finally
+        {
+            if (!adopted) next?.Dispose();
+            _accountOperation = false;
+            RefreshAccountList();
+            SetAccountButtons(true);
+        }
     }
 
     private async void RemoveAccount_Click(object sender, RoutedEventArgs e)
     {
-        RemoveAccountButton.IsEnabled = false;
+        if (_accountOperation || AccountList.SelectedItem is not string phone) return;
+        if (MessageBox.Show(this,
+            "Удалить выбранный аккаунт с этого компьютера? Другие аккаунты останутся сохранёнными.",
+            "Удаление аккаунта MAX", MessageBoxButton.YesNo, MessageBoxImage.Question)
+            != MessageBoxResult.Yes) return;
+        _accountOperation = true;
+        SetAccountButtons(false);
+        string? fallback = null;
         try
         {
-            await _transport.LogoutAsync();
-            ApplyAuthResult(new AuthResult(ConnectionState.Disconnected, null));
+            bool wasActive = phone == _currentAccountPhone;
+            if (wasActive)
+            {
+                _chatRefreshCancellation?.Cancel();
+                ResetHistory();
+                var previous = _transport;
+                _transport = CreateTransport(null);
+                _currentAccountPhone = null;
+                previous.Dispose();
+                ApplyAuthResult(new AuthResult(ConnectionState.Disconnected, null));
+            }
+            // Delete the old single-account backup only when the selected
+            // account is that legacy session, so deletion is truly local.
+            var legacy = new ProtectedMaxSessionStore();
+            if (legacy.Load()?.Phone == phone) legacy.Delete();
+            _vault.Remove(phone);
+            fallback = wasActive ? _vault.ActivePhone : null;
+            RefreshAccountList();
+            StatusLabel.Text = "Аккаунт удалён с компьютера. Остальные сеансы сохранены.";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or
+            InvalidOperationException or UnauthorizedAccessException or
+            System.Security.Cryptography.CryptographicException)
         {
-            StatusLabel.Text = "Ошибка выхода: " + ex.GetType().Name;
+            StatusLabel.Text = "Не удалось удалить аккаунт: " + ex.GetType().Name;
         }
-        finally { RemoveAccountButton.IsEnabled = true; }
+        finally
+        {
+            _accountOperation = false;
+            SetAccountButtons(true);
+        }
+        if (fallback is not null)
+            await SwitchAccountAsync(fallback);
     }
 
     private void ApplyAuthResult(AuthResult result)
@@ -135,8 +291,9 @@ public partial class MainWindow : Window
         AccountPhoneText.Text = connected
             ? _transport.CurrentPhone ?? "Сеанс подтверждён"
             : "Нет активного сеанса";
-        AddAccountButton.Content = connected ? "Сменить аккаунт" : "+ Добавить аккаунт";
-        RemoveAccountButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+        AddAccountButton.Content = "+ Добавить аккаунт";
+        RemoveAccountButton.Visibility = Visibility.Visible;
+        RemoveAccountButton.IsEnabled = AccountList.SelectedItem is string && !_accountOperation;
         ConversationHint.Text = connected
             ? "Выберите чат из списка"
             : "Выберите чат после подключения аккаунта";
@@ -210,6 +367,13 @@ public partial class MainWindow : Window
         {
             ConversationTitle.Text = "Переписка не выбрана";
             ConversationHint.Text = "Выберите чат из списка";
+            return;
+        }
+        if (chat.Id == 0)
+        {
+            ConversationTitle.Text = chat.Title;
+            ConversationHint.Text = "Служебный чат MAX (ID 0). Просмотр пока не поддерживается.";
+            StatusLabel.Text = "Служебный чат 0 нельзя открыть как обычную переписку.";
             return;
         }
         _historyChatId = chat.Id;
@@ -300,7 +464,7 @@ public partial class MainWindow : Window
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         catch (Exception ex) when (ex is IOException or InvalidDataException or
             InvalidOperationException or TimeoutException or OperationCanceledException or
-            NotSupportedException)
+            NotSupportedException or ArgumentException)
         {
             if (generation == _historyGeneration && _historyChatId == chatId)
             {

@@ -44,22 +44,26 @@
     <StackPanel Margin="16,19,14,15">
      <TextBlock Text="АККАУНТЫ" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,16"/>
      <Border Padding="10" CornerRadius="8" Background="{DynamicResource InputBrush}">
-      <StackPanel Orientation="Horizontal">
-       <TextBlock Text="○" FontSize="23" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" Margin="0,0,9,0"/>
-       <StackPanel VerticalAlignment="Center">
-        <TextBlock x:Name="AccountStateText" Text="Не подключён" FontWeight="SemiBold" FontSize="12"/>
-        <TextBlock x:Name="AccountPhoneText" Text="Нет активного сеанса" FontSize="10" Foreground="{DynamicResource MutedBrush}"/>
-       </StackPanel>
+      <StackPanel>
+       <TextBlock x:Name="AccountStateText" Text="Не подключён" FontWeight="SemiBold" FontSize="12"/>
+       <TextBlock x:Name="AccountPhoneText" Text="Нет активного сеанса" FontSize="10" Foreground="{DynamicResource MutedBrush}"/>
       </StackPanel>
      </Border>
-     <Button x:Name="AddAccountButton" Content="+ Добавить аккаунт" Margin="0,14,0,0" HorizontalAlignment="Stretch" Click="AddAccount_Click"/>
-     <Button x:Name="RemoveAccountButton" Content="Выйти из аккаунта" Visibility="Collapsed" Margin="0,8,0,0" HorizontalAlignment="Stretch" Click="RemoveAccount_Click"/>
     </StackPanel>
-    <StackPanel Grid.Row="2" Margin="16,12,14,17">
-     <TextBlock Text="Разработка интерфейса" Foreground="{DynamicResource MutedBrush}" FontWeight="SemiBold" FontSize="12"/>
-     <TextBlock TextWrapping="Wrap" Margin="0,7,0,0" Foreground="{DynamicResource MutedBrush}" FontSize="11"
-      Text="Чаты и история загружаются с сервера MAX. Отправка сообщений будет добавлена отдельно."/>
+    <ListBox x:Name="AccountList" Grid.Row="1" Margin="16,2,14,4"
+             SelectionChanged="AccountList_SelectionChanged"
+             ToolTip="Выберите сохранённый аккаунт MAX"/>
+    <StackPanel Grid.Row="2" Margin="16,10,14,17">
+     <Button x:Name="AddAccountButton" Content="+ Добавить аккаунт"
+             HorizontalAlignment="Stretch" Click="AddAccount_Click"/>
+     <Button x:Name="RemoveAccountButton" Content="Удалить с компьютера"
+             IsEnabled="False" Margin="0,8,0,0" HorizontalAlignment="Stretch"
+             Click="RemoveAccount_Click"/>
+     <TextBlock Text="История чатов доступна только для выбранного аккаунта."
+                TextWrapping="Wrap" Margin="0,14,0,0" FontSize="11"
+                Foreground="{DynamicResource MutedBrush}"/>
     </StackPanel>
+    <!-- Account controls occupy the lower account pane. -->
    </Grid>
    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource LineBrush}" ResizeBehavior="PreviousAndNext"/>
    <Grid Grid.Column="2" Background="{DynamicResource PanelBrush}">
