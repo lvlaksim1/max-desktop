@@ -1,5 +1,5 @@
 name: Publish MAX Desktop installers
-# v0.1.14: safely close authentication dialog and display server no2fa reason.
+# v0.1.15: preview of real paginated GET_CHATS reads and WPF list.
 
 on:
   push:
@@ -124,7 +124,7 @@ jobs:
           }
           $digest = (Get-FileHash $update -Algorithm SHA256).Hash.ToLowerInvariant()
           "$digest  MaxDesktop_Update_v$v.exe" | Set-Content -Encoding ASCII "$update.sha256"
-          $notes = 'MAX Desktop v0.1.14: исправлено аварийное завершение приложения при нажатии «Закрыть» или крестика в окне подключения аккаунта. Убрано повторное закрытие модального окна из асинхронного обработчика; очистка незавершённого сеанса выполняется после закрытия, при этом главный экран остаётся открытым. Добавлено Windows STA-испытание закрытия окна на стадии выбора подключения, с ожидающим SMS и кнопкой X. Серверный отказ error.profile.active.session.no2fa теперь поясняется как ограничение нового входа при активной сессии без установленного пароля 2FA. Авторизация мобильного и WEB-протоколов этим выпуском не разблокируется: оба способа получили серверный отказ. Системный VPN и транспорт MAX не изменяются; пользовательские данные сохраняются.'
+          $notes = 'MAX Desktop v0.1.15: первый испытательный выпуск получения настоящего списка чатов MAX. После успешного входа приложения выполняется GET_CHATS(53) с постраничной загрузкой, а левая панель отображает названия, последние сообщения и количество непрочитанных. Добавлена кнопка Обновить и явные сообщения об ошибке загрузки вместо подстановки пустого списка. Поддерживаются мобильный TCP/MessagePack и WebSocket/JSON. Windows CI и автономные тесты разбора синтетических ответов пройдены. Реальная загрузка чатов на пользовательском аккаунте ещё требует приёмки. История, отправка, уведомления и вложения пока не реализованы. Сохранённые сеансы, работающий системный VPN и авторизация не изменяются.'
           gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes $notes --latest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publish failed' }
           $prior = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
