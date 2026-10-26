@@ -2,7 +2,10 @@ namespace MaxDesktop.Protocol;
 
 public enum ConnectionState { Disconnected, Connecting, AwaitingVerification, AwaitingPassword, AwaitingCaptcha, Connected, Failed }
 public sealed record ChatSummary(long Id, string Title, string Preview, int UnreadCount);
-public sealed record ChatMessage(long Id, long ChatId, string Sender, string Text, DateTimeOffset SentAt);
+public sealed record ChatMessage(long Id, long ChatId, string Sender, string Text, DateTimeOffset SentAt)
+{
+    public string LocalTime => SentAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+}
 public sealed record ChatHistoryPage(IReadOnlyList<ChatMessage> Messages, long? NextBefore, bool HasMore);
 public sealed record AuthResult(ConnectionState State, string? Error, int? CodeLength = null, string? PasswordHint = null, string? CaptchaUrl = null);
 

@@ -60,6 +60,76 @@ Check(MaxChatListCodec.Opcode == 53 && MaxChatListCodec.PageSize == 100,
       "chat list request opcode and count");
 Console.WriteLine("Chat list MessagePack/JSON decoding without account data: PASS");
 
+// Synthetic-only, read-only GET_HISTORY(49) request/response regression tests.
+var historyRequest = MaxHistoryCodec.CreateRequest(-33, 1781000000000L, 30);
+var requestMap = historyRequest.ToNativePayload();
+Check(MaxHistoryCodec.Opcode == 49 && Equals(requestMap["chatId"], -33L) &&
+    Equals(requestMap["from"], 1781000000000L) &&
+    Equals(requestMap["backward"], 30) && Equals(requestMap["forward"], 0) &&
+    Equals(requestMap["getChat"], false) && Equals(requestMap["getMessages"], true) &&
+    Equals(requestMap["interactive"], false), "GET_HISTORY must be read-only and paged");
+Check(!requestMap.ContainsKey("startTime") && !requestMap.ContainsKey("endTime") &&
+      !requestMap.ContainsKey("messageIds"), "GET_HISTORY never updates read watermark");
+bool invalidHistoryCursorRejected = false;
+try { MaxHistoryCodec.CreateRequest(-33, 0, 30); }
+catch (ArgumentOutOfRangeException) { invalidHistoryCursorRejected = true; }
+Check(invalidHistoryCursorRejected, "missing backward cursor rejected");
+var syntheticHistory = new Dictionary<string, object?>
+{
+    ["messages"] = new object?[]
+    {
+        new Dictionary<string, object?>
+        {
+            ["id"] = 1002L, ["time"] = 1781000002000L, ["sender"] = 33L,
+            ["type"] = "USER", ["text"] = "Второе"
+        },
+        new Dictionary<string, object?>
+        {
+            ["id"] = 1001L, ["time"] = 1781000001000L, ["sender"] = 44L,
+            ["type"] = "USER", ["text"] = "Первое"
+        },
+        new Dictionary<string, object?>
+        {
+            ["id"] = 1000L, ["time"] = 1781000000000L, ["sender"] = 55L,
+            ["type"] = "USER", ["attaches"] = new object?[]
+            {
+                new Dictionary<string, object?> { ["type"] = "IMAGE" }
+            }
+        }
+    }
+};
+var packedHistory = MaxMessagePack.Decode(MaxMessagePack.Encode(syntheticHistory))
+    as Dictionary<string, object?>;
+Check(packedHistory is not null, "native history pack roundtrip");
+var nativeHistory = MaxHistoryCodec.DecodeNative(-33, packedHistory!, 3);
+Check(nativeHistory.Messages.Count == 3 &&
+    nativeHistory.Messages[0].Id == 1000L &&
+    nativeHistory.Messages[0].Text.Contains("Вложение", StringComparison.Ordinal) &&
+    nativeHistory.Messages[1].Id == 1001L &&
+    nativeHistory.Messages[1].Sender == "44" &&
+    nativeHistory.Messages[2].Id == 1002L &&
+    nativeHistory.NextBefore == 1781000000000L &&
+    nativeHistory.HasMore, "native history sorting, cursor and attachments");
+using (var historyJson = System.Text.Json.JsonDocument.Parse(
+    """{"messages":[{"id":1002,"time":1781000002000,"sender":33,"text":"Второе"},{"id":1001,"time":1781000001000,"sender":44,"text":"Первое"},{"id":1000,"time":1781000000000,"sender":55,"attaches":[{"type":"IMAGE"}]}]}"""))
+{
+    var webHistory = MaxHistoryCodec.DecodeWeb(-33, historyJson.RootElement, 3);
+    Check(webHistory.Messages.Count == 3 &&
+        webHistory.Messages[0].Id == nativeHistory.Messages[0].Id &&
+        webHistory.Messages[1].Text == "Первое" &&
+        webHistory.NextBefore == nativeHistory.NextBefore &&
+        webHistory.HasMore, "WebSocket history decoding");
+}
+var missingHistoryRejected = false;
+try { MaxHistoryCodec.DecodeNative(55, new Dictionary<string, object?>(), 30); }
+catch (InvalidDataException) { missingHistoryRejected = true; }
+Check(missingHistoryRejected, "missing history is an error, not empty thread");
+var lastPage = MaxHistoryCodec.DecodeNative(-33,
+    new Dictionary<string, object?> { ["messages"] = new object?[] {} }, 30);
+Check(lastPage.Messages.Count == 0 && !lastPage.HasMore && lastPage.NextBefore is null,
+    "empty history is valid only with explicit messages array");
+Console.WriteLine("GET_HISTORY(49) MessagePack/JSON, cursors, safety: PASS");
+
 // Round-trip the field types actually needed by MAX's native handshake and SMS login.
 var map = new Dictionary<string, object?>
 {

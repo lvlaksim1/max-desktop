@@ -58,7 +58,7 @@
     <StackPanel Grid.Row="2" Margin="16,12,14,17">
      <TextBlock Text="Разработка интерфейса" Foreground="{DynamicResource MutedBrush}" FontWeight="SemiBold" FontSize="12"/>
      <TextBlock TextWrapping="Wrap" Margin="0,7,0,0" Foreground="{DynamicResource MutedBrush}" FontSize="11"
-      Text="Чаты загружаются с сервера MAX. История и отправка сообщений будут добавлены отдельно."/>
+      Text="Чаты и история загружаются с сервера MAX. Отправка сообщений будет добавлена отдельно."/>
     </StackPanel>
    </Grid>
    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource LineBrush}" ResizeBehavior="PreviousAndNext"/>
@@ -93,19 +93,45 @@
    <Grid Grid.Column="4" Background="{DynamicResource WindowBrush}">
     <Grid.RowDefinitions><RowDefinition Height="62"/><RowDefinition Height="*"/><RowDefinition Height="76"/></Grid.RowDefinitions>
     <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}" Background="{DynamicResource PanelBrush}">
-     <StackPanel Margin="20,11">
-      <TextBlock x:Name="ConversationTitle" Text="Переписка не выбрана" FontSize="17" FontWeight="SemiBold"/>
-      <TextBlock x:Name="ConversationHint" Text="Выберите чат после подключения аккаунта" FontSize="11" Foreground="{DynamicResource MutedBrush}"/>
-     </StackPanel>
+     <DockPanel Margin="20,11">
+      <Button x:Name="LoadOlderMessagesButton" Content="Ранее" DockPanel.Dock="Right"
+              Click="LoadOlderMessages_Click" IsEnabled="False" Visibility="Collapsed"
+              Margin="10,0,0,0" VerticalAlignment="Center"/>
+      <StackPanel>
+       <TextBlock x:Name="ConversationTitle" Text="Переписка не выбрана" FontSize="17" FontWeight="SemiBold"/>
+       <TextBlock x:Name="ConversationHint" Text="Выберите чат после подключения аккаунта" FontSize="11" Foreground="{DynamicResource MutedBrush}"/>
+      </StackPanel>
+     </DockPanel>
     </Border>
     <Grid Grid.Row="1">
-     <ListBox x:Name="MessageList" Visibility="Collapsed" Margin="15"/>
+     <ListBox x:Name="MessageList" Visibility="Collapsed" Margin="15"
+              ScrollViewer.ScrollChanged="MessageList_ScrollChanged"
+              HorizontalContentAlignment="Stretch">
+      <ListBox.ItemTemplate>
+       <DataTemplate>
+        <Border Background="{DynamicResource PanelBrush}" CornerRadius="8"
+                Margin="3,4" Padding="12,9">
+         <StackPanel>
+          <DockPanel Margin="0,0,0,5">
+           <TextBlock Text="{Binding LocalTime}" DockPanel.Dock="Right"
+                      FontSize="10" Foreground="{DynamicResource MutedBrush}"
+                      Margin="10,0,0,0"/>
+           <TextBlock Text="{Binding Sender}" FontSize="11" FontWeight="SemiBold"
+                      Foreground="{DynamicResource AccentBrush}"/>
+          </DockPanel>
+          <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                     FontSize="13" IsTextSelectionEnabled="True"/>
+         </StackPanel>
+        </Border>
+       </DataTemplate>
+      </ListBox.ItemTemplate>
+     </ListBox>
      <StackPanel x:Name="EmptyConversation" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="350">
       <Border Width="72" Height="72" Background="{DynamicResource InputBrush}" CornerRadius="36" HorizontalAlignment="Center" Margin="0,0,0,15">
        <TextBlock Text="✉" FontSize="35" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
       </Border>
       <TextBlock Text="MAX Desktop" FontSize="22" FontWeight="SemiBold" TextAlignment="Center"/>
-      <TextBlock Text="Список чатов доступен после подключения аккаунта. Просмотр истории — следующий этап разработки."
+      <TextBlock Text="Выберите чат для загрузки истории сообщений."
        Margin="0,10,0,0" TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}"/>
      </StackPanel>
     </Grid>
