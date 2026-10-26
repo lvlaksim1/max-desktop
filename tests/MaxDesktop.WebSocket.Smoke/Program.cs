@@ -137,11 +137,11 @@ using (var hybrid = new HybridMaxTransport(new CapturingStore(), new Determinist
     hybrid.PreferredMode = MaxConnectionPreference.PhysicalWebSocket;
     Check((await hybrid.BeginLoginAsync(dummyPhone)).State == ConnectionState.AwaitingVerification,
         "setup code rejection");
-    var rejected = await hybrid.VerifyCodeAsync("123456");
-    Check(rejected.State == ConnectionState.AwaitingVerification &&
-        rejected.Error?.StartsWith("WS_CHECK_CODE:", StringComparison.Ordinal) == true,
+    var codeFailure = await hybrid.VerifyCodeAsync("123456");
+    Check(codeFailure.State == ConnectionState.AwaitingVerification &&
+        codeFailure.Error?.StartsWith("WS_CHECK_CODE:", StringComparison.Ordinal) == true,
         "CODE_ENTER server error must retain stage");
-    Check(MaxAuthStatusText.ForVerification(rejected).Contains("WS_CHECK_CODE:", StringComparison.Ordinal),
+    Check(MaxAuthStatusText.ForVerification(codeFailure).Contains("WS_CHECK_CODE:", StringComparison.Ordinal),
         "CODE_ENTER server error visible in UI");
     await hybrid.CancelPendingLoginAsync();
     Check(hybrid.State == ConnectionState.Disconnected, "cancelling OTP clears active auth");
@@ -156,11 +156,11 @@ using (var hybrid = new HybridMaxTransport(new CapturingStore(), new Determinist
     hybrid.PreferredMode = MaxConnectionPreference.PhysicalWebSocket;
     Check((await hybrid.BeginLoginAsync(dummyPhone)).State == ConnectionState.AwaitingVerification,
         "setup login rejection");
-    var rejected = await hybrid.VerifyCodeAsync("123456");
-    Check(rejected.State == ConnectionState.AwaitingVerification &&
-        rejected.Error?.StartsWith("WS_LOGIN:", StringComparison.Ordinal) == true,
+    var loginFailure = await hybrid.VerifyCodeAsync("123456");
+    Check(loginFailure.State == ConnectionState.AwaitingVerification &&
+        loginFailure.Error?.StartsWith("WS_LOGIN:", StringComparison.Ordinal) == true,
         "LOGIN server error after accepted code must retain stage");
-    Check(MaxAuthStatusText.ForVerification(rejected).Contains("WS_LOGIN:", StringComparison.Ordinal),
+    Check(MaxAuthStatusText.ForVerification(loginFailure).Contains("WS_LOGIN:", StringComparison.Ordinal),
         "LOGIN rejection visible in UI");
 }
 Console.WriteLine("Real CODE_ENTER / LOGIN failure surfacing and cancellation reset: PASS");
