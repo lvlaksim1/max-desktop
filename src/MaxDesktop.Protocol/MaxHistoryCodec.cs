@@ -23,9 +23,11 @@ public static class MaxHistoryCodec
         };
     }
 
+    public static bool CanOpenChat(long chatId) => chatId != 0;
+
     public static Request CreateRequest(long chatId, long from, int count)
     {
-        if (chatId == 0) throw new ArgumentOutOfRangeException(nameof(chatId));
+        if (!CanOpenChat(chatId)) throw new ArgumentOutOfRangeException(nameof(chatId));
         if (count is < 1 or > MaxPageSize) throw new ArgumentOutOfRangeException(nameof(count));
         if (from <= 0) throw new ArgumentOutOfRangeException(nameof(from));
         return new Request(chatId, 0, count, 0, 0, false, from, true, false);

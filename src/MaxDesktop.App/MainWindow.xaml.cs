@@ -369,7 +369,7 @@ public partial class MainWindow : Window
             ConversationHint.Text = "Выберите чат из списка";
             return;
         }
-        if (chat.Id == 0)
+        if (!MaxHistoryCodec.CanOpenChat(chat.Id))
         {
             ConversationTitle.Text = chat.Title;
             ConversationHint.Text = "Служебный чат MAX (ID 0). Просмотр пока не поддерживается.";

@@ -60,6 +60,8 @@ Check(MaxChatListCodec.Opcode == 53 && MaxChatListCodec.PageSize == 100,
       "chat list request opcode and count");
 Console.WriteLine("Chat list MessagePack/JSON decoding without account data: PASS");
 
+Check(!MaxHistoryCodec.CanOpenChat(0) && MaxHistoryCodec.CanOpenChat(-123L) &&
+      MaxHistoryCodec.CanOpenChat(123L), "special chat 0 is not a regular history endpoint");
 // Synthetic-only, read-only GET_HISTORY(49) request/response regression tests.
 var historyRequest = MaxHistoryCodec.CreateRequest(-33, 1781000000000L, 30);
 var requestMap = historyRequest.ToNativePayload();

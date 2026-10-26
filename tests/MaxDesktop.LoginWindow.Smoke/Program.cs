@@ -20,10 +20,71 @@ internal static class Program
             Check(owner, ConnectionState.Disconnected, true);
             Check(owner, ConnectionState.AwaitingVerification, true);
             Check(owner, ConnectionState.Disconnected, false);
-            Console.WriteLine("Modal login close and owner lifetime: PASS");
+            TestAccountVault();
+            Console.WriteLine("Modal login close, account vault and owner lifetime: PASS");
             return 0;
         }
         finally { owner.Close(); app.Shutdown(); }
+    }
+
+
+    private static void TestAccountVault()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "MaxDesktopVaultTest-" + Guid.NewGuid().ToString("N"));
+        var original = new MaxSavedSession("+70000000001", "legacy-test-token",
+            "legacy-device", "legacy-instance", "TCP_PHYSICAL");
+        var second = new MaxSavedSession("+70000000002", "second-test-token",
+            "second-device", "second-instance", "WEB_PHYSICAL");
+        try
+        {
+            var vault = new ProtectedMaxAccountVault(folder, () => original);
+            if (vault.Phones().Count != 1 || vault.ActivePhone != original.Phone ||
+                vault.Slot(original.Phone).Load()?.LoginToken != original.LoginToken)
+                throw new Exception("Legacy DPAPI migration did not preserve the session");
+            if (System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(folder, "max-accounts.dat")))
+                    .Contains(original.LoginToken, StringComparison.Ordinal))
+                throw new Exception("Token stored in clear text");
+            var newSlot = vault.Slot();
+            if (newSlot.Load() is not null)
+                throw new Exception("Fresh account unexpectedly reused existing credentials");
+            newSlot.Save(second);
+            if (vault.Phones().Count != 2 || vault.ActivePhone != original.Phone)
+                throw new Exception("Adding another account modified active session");
+            vault.Activate(second.Phone);
+            var reopened = new ProtectedMaxAccountVault(folder, () => original);
+            if (reopened.ActivePhone != second.Phone ||
+                reopened.Find(original.Phone)?.LoginToken != original.LoginToken ||
+                reopened.Find(second.Phone)?.LoginToken != second.LoginToken)
+                throw new Exception("Independent DPAPI sessions did not survive restart");
+            bool rejected = false;
+            try { reopened.Slot(original.Phone).Save(second); }
+            catch (InvalidOperationException) { rejected = true; }
+            if (!rejected) throw new Exception("Cross-account token overwrite accepted");
+            reopened.Remove(original.Phone);
+            var clean = new ProtectedMaxAccountVault(folder, () => original);
+            if (clean.Phones().Count != 1 || clean.Find(original.Phone) is not null ||
+                clean.ActivePhone != second.Phone)
+                throw new Exception("Deleted migrated account was resurrected");
+            clean.Remove(second.Phone);
+            var empty = new ProtectedMaxAccountVault(folder, () => original);
+            if (empty.Phones().Count != 0 || empty.ActivePhone is not null)
+                throw new Exception("Deletion did not persist without legacy resurrection");
+            // Invalid vaults fail closed; the manager must never erase them.
+            string path = Path.Combine(folder, "max-accounts.dat");
+            byte[] damaged = File.ReadAllBytes(path);
+            damaged[^1] ^= 0x6e;
+            File.WriteAllBytes(path, damaged);
+            bool failedClosed = false;
+            try { new ProtectedMaxAccountVault(folder, () => original).Phones(); }
+            catch (System.Security.Cryptography.CryptographicException) { failedClosed = true; }
+            if (!failedClosed || !File.ReadAllBytes(path).SequenceEqual(damaged))
+                throw new Exception("Damaged encrypted vault was replaced or accepted");
+            Console.WriteLine("DPAPI multi-account migration, selection, deletion and corruption: PASS");
+        }
+        finally
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
     }
 
     private static void Check(Window owner, ConnectionState state, bool button)
