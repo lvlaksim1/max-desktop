@@ -132,8 +132,10 @@ public partial class LoginWindow : Window
             PasswordSection.Visibility = Visibility.Collapsed;
             CodeHint.Text = result.CodeLength is int length && length > 0
                 ? $"Код подтверждения ({length} цифр)" : "Код подтверждения";
-            StatusText.Text = "Запрос принят. Введите код, полученный от MAX.";
-            CodeBox.Focus();
+            // A failed CODE_ENTER or LOGIN may preserve AwaitingVerification
+            // for manual recovery. Never overwrite the actual server error.
+            StatusText.Text = MaxAuthStatusText.ForVerification(result);
+            if (string.IsNullOrWhiteSpace(result.Error)) CodeBox.Focus();
             return;
         }
         if (result.State == ConnectionState.AwaitingCaptcha)
@@ -198,9 +200,25 @@ public partial class LoginWindow : Window
         TransportPicker.IsEnabled = !state;
     }
 
-    private void Window_Closing(object? sender, CancelEventArgs e)
+    private bool _closedAuthCleanup;
+
+    private async void Window_Closing(object? sender, CancelEventArgs e)
     {
-        if (_busy && !_authenticated) e.Cancel = true;
+        if (_busy && !_authenticated)
+        {
+            e.Cancel = true;
+            return;
+        }
+        if (!_authenticated && !_closedAuthCleanup)
+        {
+            // Keep the dialog open until its pending OTP/CAPTCHA session is
+            // discarded. A newly opened dialog can then run diagnostics.
+            e.Cancel = true;
+            _closedAuthCleanup = true;
+            try { await _transport.CancelPendingLoginAsync(); }
+            catch (Exception) { /* Closing is still permitted. */ }
+            Close();
+        }
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)

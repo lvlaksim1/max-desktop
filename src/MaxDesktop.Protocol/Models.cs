@@ -5,6 +5,16 @@ public sealed record ChatSummary(long Id, string Title, string Preview, int Unre
 public sealed record ChatMessage(long Id, long ChatId, string Sender, string Text, DateTimeOffset SentAt);
 public sealed record AuthResult(ConnectionState State, string? Error, int? CodeLength = null, string? PasswordHint = null, string? CaptchaUrl = null);
 
+/// <summary>Pure UI status selection: a validation failure must never look like a new SMS request.</summary>
+public static class MaxAuthStatusText
+{
+    public static string ForVerification(AuthResult result) =>
+        !string.IsNullOrWhiteSpace(result.Error)
+            ? result.Error
+            : "Запрос принят. Введите код, полученный от MAX.";
+}
+
+
 
 public sealed record MaxSavedSession(string Phone, string LoginToken, string DeviceId, string InstanceId, string Transport = "TCP");
 

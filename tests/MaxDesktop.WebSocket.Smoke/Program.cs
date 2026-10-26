@@ -119,6 +119,51 @@ using (var hybrid = new HybridMaxTransport(
     Check(cancelledCaptchaChannel.SmsCount == 1 &&
         hybrid.State == ConnectionState.Disconnected, "cancel must not retry SMS");
 }
+// An accepted SMS request is not an accepted code. Rejections at either
+// CODE_ENTER(18) or LOGIN(19) must be visible, not replaced by "SMS requested".
+Check(MaxAuthStatusText.ForVerification(
+    new AuthResult(ConnectionState.AwaitingVerification, "WS_CHECK_CODE: Неверный код")) ==
+    "WS_CHECK_CODE: Неверный код", "verification UI preserves server rejection");
+Check(MaxAuthStatusText.ForVerification(
+    new AuthResult(ConnectionState.AwaitingVerification, "WS_LOGIN: Вход отклонён")) ==
+    "WS_LOGIN: Вход отклонён", "verification UI preserves LOGIN failure");
+Check(MaxAuthStatusText.ForVerification(
+    new AuthResult(ConnectionState.AwaitingVerification, null)) ==
+    "Запрос принят. Введите код, полученный от MAX.", "SMS accepted status when no error");
+
+var rejectedCodeChannel = new DeterministicChannel { RejectCodeResponse = true };
+using (var hybrid = new HybridMaxTransport(new CapturingStore(), new DeterministicChannel(), rejectedCodeChannel))
+{
+    hybrid.PreferredMode = MaxConnectionPreference.PhysicalWebSocket;
+    Check((await hybrid.BeginLoginAsync(dummyPhone)).State == ConnectionState.AwaitingVerification,
+        "setup code rejection");
+    var rejected = await hybrid.VerifyCodeAsync("123456");
+    Check(rejected.State == ConnectionState.AwaitingVerification &&
+        rejected.Error?.StartsWith("WS_CHECK_CODE:", StringComparison.Ordinal) == true,
+        "CODE_ENTER server error must retain stage");
+    Check(MaxAuthStatusText.ForVerification(rejected).Contains("WS_CHECK_CODE:", StringComparison.Ordinal),
+        "CODE_ENTER server error visible in UI");
+    await hybrid.CancelPendingLoginAsync();
+    Check(hybrid.State == ConnectionState.Disconnected, "cancelling OTP clears active auth");
+    var probe = await hybrid.ProbeConnectionAsync();
+    Check(probe.State == ConnectionState.Disconnected &&
+        probe.Error?.Contains("SESSION_INIT", StringComparison.Ordinal) == true,
+        "probe allowed after closing incomplete login");
+}
+var rejectedLoginChannel = new DeterministicChannel { RejectLoginResponse = true };
+using (var hybrid = new HybridMaxTransport(new CapturingStore(), new DeterministicChannel(), rejectedLoginChannel))
+{
+    hybrid.PreferredMode = MaxConnectionPreference.PhysicalWebSocket;
+    Check((await hybrid.BeginLoginAsync(dummyPhone)).State == ConnectionState.AwaitingVerification,
+        "setup login rejection");
+    var rejected = await hybrid.VerifyCodeAsync("123456");
+    Check(rejected.State == ConnectionState.AwaitingVerification &&
+        rejected.Error?.StartsWith("WS_LOGIN:", StringComparison.Ordinal) == true,
+        "LOGIN server error after accepted code must retain stage");
+    Check(MaxAuthStatusText.ForVerification(rejected).Contains("WS_LOGIN:", StringComparison.Ordinal),
+        "LOGIN rejection visible in UI");
+}
+Console.WriteLine("Real CODE_ENTER / LOGIN failure surfacing and cancellation reset: PASS");
 Console.WriteLine("Manual VK captcha challenge/resume/cancel/no duplicate SMS: PASS");
 Console.WriteLine("Browser/managed WEB channel separation, SMS and login state, no-duplicate-code rule: PASS");
 
@@ -144,6 +189,8 @@ sealed class DeterministicChannel : IMaxWebSocketChannel
     private readonly Queue<string> _responses = new();
     public bool IsOpen { get; private set; }
     public bool RejectSmsResponse { get; set; }
+    public bool RejectCodeResponse { get; set; }
+    public bool RejectLoginResponse { get; set; }
     public bool RequiresHumanCaptcha { get; set; }
     public int CaptchaCount { get; private set; }
     public int SmsCount { get; private set; }
@@ -162,6 +209,18 @@ sealed class DeterministicChannel : IMaxWebSocketChannel
         if (opcode == 224) CaptchaCount++;
         bool hasCaptcha = json.GetProperty("payload").TryGetProperty("captchaToken", out var token) &&
             token.ValueKind == JsonValueKind.String;
+        if (opcode == 18 && RejectCodeResponse)
+        {
+            _responses.Enqueue($"{{\"ver\":11,\"cmd\":3,\"seq\":{seq},\"opcode\":18," +
+                "\"payload\":{\"error\":\"auth.invalid.code\",\"localizedMessage\":\"Неверный код\"}}");
+            return Task.CompletedTask;
+        }
+        if (opcode == 19 && RejectLoginResponse)
+        {
+            _responses.Enqueue($"{{\"ver\":11,\"cmd\":3,\"seq\":{seq},\"opcode\":19," +
+                "\"payload\":{\"error\":\"auth.denied\",\"localizedMessage\":\"Вход отклонён\"}}");
+            return Task.CompletedTask;
+        }
         if (opcode == 17 && RequiresHumanCaptcha && !hasCaptcha)
         {
             _responses.Enqueue($"{{\"ver\":11,\"cmd\":3,\"seq\":{seq},\"opcode\":17," +

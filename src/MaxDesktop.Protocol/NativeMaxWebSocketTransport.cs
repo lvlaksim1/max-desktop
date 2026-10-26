@@ -197,10 +197,16 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
         await _authGate.WaitAsync();
         try
         {
-            if (State == ConnectionState.AwaitingCaptcha)
+            // Closing the sign-in dialog cancels all incomplete stages, not
+            // only CAPTCHA. A later diagnostic must not inherit stale OTP state.
+            if (State is ConnectionState.AwaitingCaptcha or
+                ConnectionState.AwaitingVerification or
+                ConnectionState.AwaitingPassword or
+                ConnectionState.Failed or ConnectionState.Connecting)
             {
                 _captchaLink = null;
                 _verificationToken = null;
+                _passwordTrack = null;
                 _phone = null;
                 await DisconnectAsync();
                 State = ConnectionState.Disconnected;
