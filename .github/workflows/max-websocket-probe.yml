@@ -32,6 +32,6 @@ jobs:
           if ($curlExit -ne 0) {
             throw "Windows curl.exe failed; compare the exit code with the user's independent Windows result."
           }
-          if ($httpStatus -notmatch '^[1-5][0-9]{2}) {
+          if ($httpStatus -notmatch '^[1-5][0-9]{2}$') {
             throw "No valid HTTP response code was returned after the TLS handshake."
           }
