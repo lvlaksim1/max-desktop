@@ -1,7 +1,7 @@
-# MAX Desktop — 2026-10-27, модифицированный исследовательский APK
+# MAX Desktop — 2026-10-27: исследование и исправление отсутствия SMS fallback
 
-- MAX Desktop: последний опубликованный v0.1.21, мобильный TCP Android и серверный WebAppPlatform=android подтверждены пользователем; мини-приложение кодов требует штатной привязки устройства.
-- APK MAX 26.35.1 (6867) ранее статически исследован; механизм WebAppVerifyMobileId использует сотовое подключение Android.
-- В lvlaksim1/max-android-research добавлены tools/patch_mobileid_diagnostics.py и workflow build-mobileid-research-mod.yml. Run 40414205114 SUCCESS, артефакт 12693639279, APK SHA256 b5a8510caf37ab38ebe9a40dd7457b3e74106f9dbd507da52301bad31d00acba, размер 134098887 байт. Подписан отдельным тестовым сертификатом, корректность подписи v2/v3 проверена. Реальное Android-испытание ещё не проведено, замена официальной установки без удаления невозможна.
-- Мод записывает ТОЛЬКО обезличенные записи об обращении к Mobile ID и начале сотового HTTP в JSONL. Действительные токены/авторизационные заголовки/ответы Mobile ID/коды не экспортируются. Следовательно, пользователя нельзя вводить в заблуждение: это не средство переноса сеанса в MAX Desktop.
-- Подробности: https://github.com/lvlaksim1/max-android-research/blob/main/docs/mobileid-research-mod-2026-10-27.md. Рабочий Windows MAX Desktop, VPN и авторизация не изменены.
+- Официальный MAX: SMS при «Привязать новое устройство» в боте «Коды подтверждения» документирован для Госуслуг и аккаунта с паролем входа (2FA), устанавливаемым на Android/iOS, не веб. URL источников в docs/protocol/sms-fallback-mobileid-2026-10-27.md.
+- v0.1.21 уже умеет SMS при логине и дополнительный пароль, но для привязки доверенного устройства это другой серверный процесс. В оригинальном APK приватный интерфейс PrivateWebViewHandler.postEvent('WebAppVerifyMobileId',...) и штатная отрицательная ошибка client.verify_mobile_id.no_cellular отсутствовали в нашем WebView2.
+- Исследовательское изменение v0.1.22: minimal JS bridge в top-frame HTTPS origin выданного MAX адреса, распознаёт только Mobile ID requestId, возвращает исходный JSON error requestId / error.code по WebApp.sendEvent. Не делает запросов к оператору и не имитирует успех. Smoke tests проверены Windows CI; телефон/SMS успешная пользовательская приёмка НЕ проводилась.
+- Документ docs/protocol/sms-fallback-mobileid-2026-10-27.md и заметки релиза docs/release-notes/v0.1.22.md. Выпуск бинарника должен подтверждаться GitHub Release, не считать один git-коммит выпущенным.
+- Действующие сессии и VPN без изменений, APK исследовательского проекта к текущему исправлению не относится.
