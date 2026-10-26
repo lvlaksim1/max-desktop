@@ -1,0 +1,21 @@
+name: Diagnose MAX WebSocket anonymous INIT (no SMS, no QR)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/MaxDesktop.WebSocket.Probe/**'
+      - '.github/workflows/max-websocket-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  anonymous-websocket-init:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Check only WebSocket TLS and anonymous INIT
+        run: dotnet run --project tests/MaxDesktop.WebSocket.Probe/MaxDesktop.WebSocket.Probe.csproj -c Release
