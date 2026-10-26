@@ -52,6 +52,41 @@ var legacy = new MaxSavedSession("test", "dummy-token", "id", "instance");
 Check(legacy.Transport == "TCP", "legacy sessions stay TCP");
 using (var doc = JsonDocument.Parse(JsonSerializer.Serialize(legacy)))
     Check(doc.RootElement.GetProperty("Transport").GetString() == "TCP", "stored transport discriminator");
+
+// Exercise the new swappable Chromium channel with a deterministic fake.
+// This never reaches the MAX network and never requests a real SMS.
+var simulatedStore = new CapturingStore();
+using (var simulated = new HybridMaxTransport(simulatedStore, new DeterministicChannel()))
+{
+    simulated.PreferredMode = MaxConnectionPreference.BrowserWebSocket;
+    var probe = await simulated.ProbeConnectionAsync();
+    Check(probe.State == ConnectionState.Disconnected &&
+        probe.Error?.Contains("подтверждены", StringComparison.Ordinal) == true,
+        "browser channel anonymous INIT");
+    var sms = await simulated.BeginLoginAsync(dummyPhone);
+    Check(sms.State == ConnectionState.AwaitingVerification && sms.CodeLength == 6,
+        "browser channel SMS start");
+    var verified = await simulated.VerifyCodeAsync("123456");
+    Check(verified.State == ConnectionState.Connected, "browser channel confirmed login");
+    Check(simulatedStore.Saved?.Transport == "WEB_EDGE",
+        "browser login session persisted with dedicated transport tag");
+    await simulated.LogoutAsync();
+    Check(simulated.State == ConnectionState.Disconnected && simulatedStore.Saved is null,
+        "browser channel logout");
+}
+
+// Critically, never retry the SMS request automatically after a transport
+// failure on opcode 17: the server could have queued the SMS already.
+var smsFailure = new DeterministicChannel { RejectSmsResponse = true };
+using (var hybrid = new HybridMaxTransport(new CapturingStore(), smsFailure))
+{
+    hybrid.PreferredMode = MaxConnectionPreference.Automatic;
+    var result = await hybrid.BeginLoginAsync(dummyPhone);
+    Check(result.State == ConnectionState.Failed, "uncertain SMS request fails without fallback");
+    Check(smsFailure.SmsCount == 1, "no duplicate SMS on uncertain failure");
+}
+Console.WriteLine("Browser/managed WEB channel separation, SMS and login state, no-duplicate-code rule: PASS");
+
 Console.WriteLine("MAX WEB JSON protocol, SMS payload, selection, and backward-compatible session: PASS");
 
 sealed class EmptyStore : IMaxSessionStore
@@ -59,4 +94,57 @@ sealed class EmptyStore : IMaxSessionStore
     public MaxSavedSession? Load() => null;
     public void Save(MaxSavedSession session) => throw new Exception("Unexpected save");
     public void Delete() { }
+}
+
+sealed class CapturingStore : IMaxSessionStore
+{
+    public MaxSavedSession? Saved { get; private set; }
+    public MaxSavedSession? Load() => Saved;
+    public void Save(MaxSavedSession session) => Saved = session;
+    public void Delete() => Saved = null;
+}
+
+sealed class DeterministicChannel : IMaxWebSocketChannel
+{
+    private readonly Queue<string> _responses = new();
+    public bool IsOpen { get; private set; }
+    public bool RejectSmsResponse { get; set; }
+    public int SmsCount { get; private set; }
+    public Task ConnectAsync(CancellationToken ct)
+    {
+        IsOpen = true;
+        return Task.CompletedTask;
+    }
+    public Task SendTextAsync(string text, CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(text);
+        var json = doc.RootElement;
+        int opcode = json.GetProperty("opcode").GetInt32();
+        int seq = json.GetProperty("seq").GetInt32();
+        string payload = opcode switch
+        {
+            6 => "{}",
+            17 => """{"token":"test-otp-only","codeLength":6}""",
+            18 => """{"tokenAttrs":{"LOGIN":{"token":"fake-login-token"}}}""",
+            19 => "{}",
+            _ => "{}"
+        };
+        if (opcode == 17) SmsCount++;
+        if (opcode != 17 || !RejectSmsResponse)
+            _responses.Enqueue($"{{\"ver\":11,\"cmd\":1,\"seq\":{seq},\"opcode\":{opcode},\"payload\":{payload}}}");
+        return Task.CompletedTask;
+    }
+    public Task<string> ReceiveTextAsync(CancellationToken ct)
+    {
+        if (_responses.Count == 0)
+            throw new IOException("Simulated response unavailable after SMS send.");
+        return Task.FromResult(_responses.Dequeue());
+    }
+    public Task DisconnectAsync()
+    {
+        IsOpen = false;
+        _responses.Clear();
+        return Task.CompletedTask;
+    }
+    public void Dispose() => IsOpen = false;
 }
