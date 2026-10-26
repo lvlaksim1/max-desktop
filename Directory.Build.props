@@ -4,6 +4,6 @@
   <ImplicitUsings>enable</ImplicitUsings>
   <EnableWindowsTargeting>true</EnableWindowsTargeting>
   <!-- v0.1.22: original MAX WebApp private bridge reports no_cellular; server controls SMS option. -->
-  <Version>0.1.22</Version>
+  <Version>0.1.23</Version>
 </PropertyGroup>
 </Project>
