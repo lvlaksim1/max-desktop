@@ -146,7 +146,7 @@ public partial class MainWindow : Window
                 selectedAccount != _currentAccountPhone || _historyChatId != chatId)
                 return;
             StatusLabel.Text = "MAX подтвердил запуск мини-приложения.";
-            new MiniAppWindow(signedUrl, action.Text) { Owner = this }.Show();
+            new MiniAppWindow(signedUrl, action.Text, selectedAccount) { Owner = this }.Show();
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or
