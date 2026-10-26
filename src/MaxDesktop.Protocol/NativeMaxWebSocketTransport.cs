@@ -506,8 +506,33 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
         finally { _authGate.Release(); }
     }
 
-    public Task<IReadOnlyList<ChatSummary>> GetChatsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<ChatSummary>>([]);
+    public async Task<IReadOnlyList<ChatSummary>> GetChatsAsync(CancellationToken cancellationToken = default)
+    {
+        await _authGate.WaitAsync(cancellationToken);
+        try
+        {
+            EnsureNotDisposed();
+            if (State != ConnectionState.Connected)
+                throw new InvalidOperationException("Войдите в MAX перед загрузкой чатов.");
+            var chats = new List<ChatSummary>();
+            var seen = new HashSet<long>();
+            long marker = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            for (int page = 0; page < MaxChatListCodec.MaxPages; page++)
+            {
+                var response = await RequestAsync(MaxChatListCodec.Opcode,
+                    new { count = MaxChatListCodec.PageSize, marker }, cancellationToken);
+                var result = MaxChatListCodec.DecodeWeb(response.Payload);
+                foreach (var item in result.Chats)
+                    if (seen.Add(item.Id)) chats.Add(item);
+                if (result.Chats.Count == 0 || result.Marker is not > 0 ||
+                    result.Marker >= marker)
+                    return chats;
+                marker = result.Marker.Value;
+            }
+            throw new InvalidDataException("MAX вернул слишком много страниц чатов; список неполный.");
+        }
+        finally { _authGate.Release(); }
+    }
     public Task<IReadOnlyList<ChatMessage>> GetMessagesAsync(long chatId, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<ChatMessage>>([]);
     public Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken = default) =>
