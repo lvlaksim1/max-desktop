@@ -119,8 +119,11 @@
            <TextBlock Text="{Binding Sender}" FontSize="11" FontWeight="SemiBold"
                       Foreground="{DynamicResource AccentBrush}"/>
           </DockPanel>
-          <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
-                     FontSize="13" IsTextSelectionEnabled="True"/>
+          <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True"
+                   BorderThickness="0" Background="Transparent"
+                   Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"
+                   FontSize="13" Padding="0" VerticalScrollBarVisibility="Disabled"
+                   HorizontalScrollBarVisibility="Disabled"/>
          </StackPanel>
         </Border>
        </DataTemplate>
