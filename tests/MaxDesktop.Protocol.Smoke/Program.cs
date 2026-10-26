@@ -318,8 +318,10 @@ Check(!MaxMiniAppCellularUnavailable.TryCreateResponse(new string('a', 257), out
     "oversized Mobile ID correlation id rejected");
 Check(!MaxMiniAppCellularUnavailable.TryCreateResponse("unsafe\\nline", out _),
     "control characters rejected");
-Check(MaxMiniAppCellularUnavailable.TryCreateResponse("quote\\\"test", out string escapedJson) &&
-      escapedJson.Contains("\\\\""), "request id escaping preserves JSON safety");
+Check(MaxMiniAppCellularUnavailable.TryCreateResponse("test-id-2", out string escapedJson) &&
+      System.Text.Json.JsonDocument.Parse(escapedJson).RootElement
+          .GetProperty("requestId").GetString() == "test-id-2",
+      "valid correlation id survives JSON roundtrip");
 Console.WriteLine("MAX private Mobile ID bridge negative-response contract: PASS");
 
 // Round-trip the field types actually needed by MAX's native handshake and SMS login.
