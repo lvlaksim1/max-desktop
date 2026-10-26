@@ -114,12 +114,11 @@ public static class MaxSystemProxyTunnel
             int read = await stream.ReadAsync(one, ct);
             if (read == 0) throw new IOException("Прокси закрыл соединение до ответа CONNECT.");
             buffer.WriteByte(one[0]);
-            consecutive = one[0] switch
-            {
-                (byte)'\r' when consecutive == 0 or 2 => consecutive + 1,
-                (byte)'\n' when consecutive == 1 or 3 => consecutive + 1,
-                _ => 0
-            };
+            if (one[0] == 13 && (consecutive == 0 || consecutive == 2))
+                consecutive++;
+            else if (one[0] == 10 && (consecutive == 1 || consecutive == 3))
+                consecutive++;
+            else consecutive = one[0] == 13 ? 1 : 0;
             if (consecutive == 4) break;
         }
         if (consecutive != 4) throw new InvalidDataException("Ответ HTTP CONNECT слишком большой.");
