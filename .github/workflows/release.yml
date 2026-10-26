@@ -1,5 +1,5 @@
 name: Publish MAX Desktop installers
-# v0.1.11: use the pinned VK Captcha SDK completion callback, not raw iframe messages.
+# v0.1.12: show actual CODE_ENTER/LOGIN errors and discard stale unfinished auth state.
 
 on:
   push:
@@ -120,7 +120,7 @@ jobs:
           }
           $digest = (Get-FileHash $update -Algorithm SHA256).Hash.ToLowerInvariant()
           "$digest  MaxDesktop_Update_v$v.exe" | Set-Content -Encoding ASCII "$update.sha256"
-          $notes = 'MAX Desktop v0.1.11: устранено зависание после галочки VK ID Captcha. Вместо самостоятельного разбора postMessage из iframe используется VK Captcha SDK 2.0.0 с событием SUCCESS и токеном пользователя. Библиотека включена в установщик, внешняя загрузка при входе не требуется. Оставлены запрет автоматических повторов SMS, ручное прохождение проверки, физический маршрут WebSocket при включённом системном VPN и сохранение ранее созданных сеансов. Windows WPF и автономные тесты callback/протокола прошли; реальную отправку SMS нужно проверить в установленной версии.'
+          $notes = 'MAX Desktop v0.1.12: исправлено скрытие ошибок проверки SMS-кода и входа. Вместо повторного сообщения «Запрос принят» показывается фактический этап WS_CHECK_CODE или WS_LOGIN и безопасный текст отказа сервера. При закрытии незавершённого окна авторизации сбрасывается ожидающий сеанс, чтобы последующая проверка подключения работала корректно. Добавлены автономные испытания ошибок CODE_ENTER и LOGIN и закрытия незавершённого входа. Механизм VK Captcha, физическое WebSocket-подключение при включённом системном VPN, сохранение авторизованных сеансов и запрет QR сохранены. Реальный исход SMS-авторизации требует пользовательской проверки.'
           gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes $notes --latest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publish failed' }
           $prior = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
