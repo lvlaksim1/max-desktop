@@ -124,7 +124,7 @@ public partial class LoginWindow : Window
         {
             // Only the user-visible diagnostic message is copied.
             // Do not include phone, SMS code, password or session storage.
-            Clipboard.SetText(StatusText.Text);
+            System.Windows.Clipboard.SetText(StatusText.Text);
         }
         catch (System.Runtime.InteropServices.ExternalException)
         {
