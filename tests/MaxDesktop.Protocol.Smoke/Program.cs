@@ -214,8 +214,7 @@ using (var client = new System.Net.Sockets.TcpClient())
     await client.ConnectAsync(System.Net.IPAddress.Loopback, localProxy.Port);
     using var network = client.GetStream();
     await network.WriteAsync(System.Text.Encoding.ASCII.GetBytes(
-        "CONNECT 127.0.0.1:443 HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n"
-        .Replace("\\\\r", "\\r").Replace("\\\\n", "\\n")));
+        "CONNECT 127.0.0.1:443 HTTP/1.1\r\nHost: localhost\r\n\r\n"));
     byte[] response = new byte[256];
     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(6));
     int received = await network.ReadAsync(response, timeout.Token);
