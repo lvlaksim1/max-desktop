@@ -105,6 +105,129 @@ using (var resource = typeof(MaxTlsCertificateValidator).Assembly.GetManifestRes
 }
 Console.WriteLine("TLS trust policy and embedded root checks passed.");
 
+
+// End-to-end loopback tests for raw proxy CONNECT/SOCKS5 tunnels.
+// No traffic to MAX, and never transmit an account token through the proxy.
+using (var stop = new CancellationTokenSource(TimeSpan.FromSeconds(12)))
+{
+    var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+    listener.Start();
+    int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+    var server = Task.Run(async () =>
+    {
+        using var peer = await listener.AcceptTcpClientAsync(stop.Token);
+        var stream = peer.GetStream();
+        using var request = new MemoryStream();
+        byte[] one = new byte[1];
+        while (request.Length < 2048)
+        {
+            await stream.ReadExactlyAsync(one, stop.Token);
+            request.WriteByte(one[0]);
+            if (Encoding.ASCII.GetString(request.ToArray()).EndsWith("\r\n\r\n"))
+                break;
+        }
+        string requestLine = Encoding.ASCII.GetString(request.ToArray());
+        Check(requestLine.StartsWith("CONNECT api2.oneme.ru:443 HTTP/1.1\r\n", StringComparison.Ordinal),
+            "HTTP CONNECT target");
+        Check(!requestLine.Contains("Proxy-Authorization", StringComparison.OrdinalIgnoreCase),
+            "do not send proxy credentials");
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(
+            "HTTP/1.1 200 Connection established\r\n\r\n"), stop.Token);
+        byte[] proof = new byte[3];
+        await stream.ReadExactlyAsync(proof, stop.Token);
+        Check(proof.SequenceEqual(new byte[] { 3, 1, 4 }), "HTTP CONNECT tunnel bytes");
+    });
+    var tunnel = await MaxSystemProxyTunnel.OpenAsync(
+        new Uri($"http://127.0.0.1:{port}"), "api2.oneme.ru", 443, stop.Token);
+    try
+    {
+        await tunnel.Stream.WriteAsync(new byte[] { 3, 1, 4 }, stop.Token);
+        await server;
+    }
+    finally
+    {
+        tunnel.Stream.Dispose();
+        tunnel.Socket.Dispose();
+        listener.Stop();
+    }
+}
+
+using (var stop = new CancellationTokenSource(TimeSpan.FromSeconds(12)))
+{
+    var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+    listener.Start();
+    int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+    var server = Task.Run(async () =>
+    {
+        using var peer = await listener.AcceptTcpClientAsync(stop.Token);
+        var stream = peer.GetStream();
+        byte[] greeting = new byte[3];
+        await stream.ReadExactlyAsync(greeting, stop.Token);
+        Check(greeting.SequenceEqual(new byte[] { 5, 1, 0 }), "SOCKS5 no-auth greeting");
+        await stream.WriteAsync(new byte[] { 5, 0 }, stop.Token);
+        byte[] header = new byte[5];
+        await stream.ReadExactlyAsync(header, stop.Token);
+        Check(header[0] == 5 && header[1] == 1 && header[3] == 3, "SOCKS5 connect request");
+        byte[] destination = new byte[header[4] + 2];
+        await stream.ReadExactlyAsync(destination, stop.Token);
+        string host = Encoding.ASCII.GetString(destination, 0, header[4]);
+        Check(host == "api-tg.oneme.ru", "SOCKS5 DNS host preserved");
+        Check(destination[^2] == 1 && destination[^1] == 187, "SOCKS5 target port");
+        await stream.WriteAsync(new byte[] { 5, 0, 0, 1, 127, 0, 0, 1, 0, 0 }, stop.Token);
+        byte[] proof = new byte[3];
+        await stream.ReadExactlyAsync(proof, stop.Token);
+        Check(proof.SequenceEqual(new byte[] { 2, 7, 1 }), "SOCKS5 tunnel bytes");
+    });
+    var tunnel = await MaxSystemProxyTunnel.OpenAsync(
+        new Uri($"socks5://127.0.0.1:{port}"), "api-tg.oneme.ru", 443, stop.Token);
+    try
+    {
+        await tunnel.Stream.WriteAsync(new byte[] { 2, 7, 1 }, stop.Token);
+        await server;
+    }
+    finally
+    {
+        tunnel.Stream.Dispose();
+        tunnel.Socket.Dispose();
+        listener.Stop();
+    }
+}
+
+using (var stop = new CancellationTokenSource(TimeSpan.FromSeconds(12)))
+{
+    var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+    listener.Start();
+    int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+    var server = Task.Run(async () =>
+    {
+        using var peer = await listener.AcceptTcpClientAsync(stop.Token);
+        var stream = peer.GetStream();
+        // Consume the CONNECT request before returning proxy-auth-required.
+        byte[] one = new byte[1];
+        int state = 0;
+        while (state != 4)
+        {
+            await stream.ReadExactlyAsync(one, stop.Token);
+            if (one[0] == 13 && (state == 0 || state == 2)) state++;
+            else if (one[0] == 10 && (state == 1 || state == 3)) state++;
+            else state = one[0] == 13 ? 1 : 0;
+        }
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(
+            "HTTP/1.1 407 Proxy Authentication Required\r\n\r\n"), stop.Token);
+    });
+    bool refused = false;
+    try
+    {
+        await MaxSystemProxyTunnel.OpenAsync(
+            new Uri($"http://127.0.0.1:{port}"), "api2.oneme.ru", 443, stop.Token);
+    }
+    catch (UnauthorizedAccessException) { refused = true; }
+    await server;
+    listener.Stop();
+    Check(refused, "HTTP CONNECT 407 must fail, not silently transmit credentials");
+}
+Console.WriteLine("HTTP CONNECT, SOCKS5 and proxy authentication refusal: PASS");
+
 sealed class EmptyStore : IMaxSessionStore
 {
     public MaxSavedSession? Load() => null;
