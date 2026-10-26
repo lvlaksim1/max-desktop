@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'tests/MaxDesktop.EndpointProbe/**'
+      - 'src/MaxDesktop.Protocol/NativeMaxTransport.cs'
+      - 'src/MaxDesktop.Protocol/PhysicalMaxWebSocketChannel.cs'
+      - 'src/MaxDesktop.Protocol/HybridMaxTransport.cs'
       - '.github/workflows/max-endpoint-probe.yml'
   workflow_dispatch:
 permissions:
@@ -19,3 +22,8 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Test TLS and anonymous session init per endpoint
         run: dotnet run --project tests/MaxDesktop.EndpointProbe/MaxDesktop.EndpointProbe.csproj -c Release
+      - name: Verify native Android physical anonymous SESSION_INIT
+        shell: pwsh
+        run: |
+          dotnet run --project tests/MaxDesktop.EndpointProbe/MaxDesktop.EndpointProbe.csproj -c Release -- --physical --require-success
+          if ($LASTEXITCODE -ne 0) { throw 'Native Android physical SESSION_INIT failed' }

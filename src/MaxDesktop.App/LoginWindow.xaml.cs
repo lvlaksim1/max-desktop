@@ -26,6 +26,7 @@ public partial class LoginWindow : Window
             2 => MaxConnectionPreference.WebSocket,
             3 => MaxConnectionPreference.Tcp,
             4 => MaxConnectionPreference.PhysicalWebSocket,
+            5 => MaxConnectionPreference.TcpPhysical,
             _ => MaxConnectionPreference.Automatic
         };
     }

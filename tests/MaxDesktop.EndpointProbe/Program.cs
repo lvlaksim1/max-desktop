@@ -5,6 +5,21 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using MaxDesktop.Protocol;
 
+bool physical = args.Any(arg => arg.Equals("--physical", StringComparison.OrdinalIgnoreCase));
+bool requireSuccess = args.Any(arg => arg.Equals("--require-success", StringComparison.OrdinalIgnoreCase));
+if (physical)
+{
+    Console.WriteLine("Anonymous native Android physical TCP SESSION_INIT; no phone, OTP, login token or SMS.");
+    using var transport = new NativeMaxTransport(new NoSessionStore(), bindPhysicalInterface: true);
+    var result = await transport.ProbeConnectionAsync();
+    bool valid = result.State == ConnectionState.Disconnected &&
+        result.Error?.Contains("SESSION_INIT работают", StringComparison.Ordinal) == true;
+    Console.WriteLine("ANDROID_PHYSICAL_INIT=" + (valid ? "CONFIRMED" : "NOT_CONFIRMED"));
+    if (!valid)
+        Console.WriteLine("ANDROID_PHYSICAL_ERROR_CLASS=" + (result.State == ConnectionState.Failed ? "CONNECT_OR_INIT" : "STATE"));
+    return requireSuccess && !valid ? 1 : 0;
+}
+
 // Anonymous, bounded production-endpoint discovery. No phone, SMS or account data.
 foreach (string hostname in new[] { "api2.oneme.ru", "api.oneme.ru", "api-tg.oneme.ru" })
 {
@@ -65,3 +80,10 @@ foreach (string hostname in new[] { "api2.oneme.ru", "api.oneme.ru", "api-tg.one
     await Task.Delay(TimeSpan.FromSeconds(5));
 }
 return 0;
+
+sealed class NoSessionStore : IMaxSessionStore
+{
+    public MaxSavedSession? Load() => null;
+    public void Save(MaxSavedSession session) => throw new InvalidOperationException("Anonymous tests must not save sessions.");
+    public void Delete() { }
+}

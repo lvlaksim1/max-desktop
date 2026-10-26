@@ -32,6 +32,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         "00000000-0000000000000000-00000000-0000000000000000-0000000000000000-0-0000000000000000-00000000";
 
     private readonly IMaxSessionStore _sessionStore;
+    private readonly bool _bindPhysical;
     private readonly SemaphoreSlim _authGate = new(1, 1);
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly ConcurrentDictionary<ushort, TaskCompletionSource<MaxWireFrame>> _pending = new();
@@ -61,9 +62,10 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     public string LastConnectionPhase => _connectionPhase;
 
 
-    public NativeMaxTransport(IMaxSessionStore sessionStore)
+    public NativeMaxTransport(IMaxSessionStore sessionStore, bool bindPhysicalInterface = false)
     {
         _sessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
+        _bindPhysical = bindPhysicalInterface;
     }
 
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
@@ -253,12 +255,30 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         finally { _authGate.Release(); }
     }
 
+    public async Task CancelPendingLoginAsync()
+    {
+        await _authGate.WaitAsync();
+        try
+        {
+            if (State != ConnectionState.Connected)
+            {
+                await DisconnectAsync();
+                _requestToken = null;
+                _passwordTrack = null;
+                _phone = null;
+                State = ConnectionState.Disconnected;
+            }
+        }
+        finally { _authGate.Release(); }
+    }
+
     private async Task<AuthResult> SaveAuthenticatedLoginAsync(string token, CancellationToken cancellationToken)
     {
         await CompleteLoginAsync(token, cancellationToken);
         if (_deviceId is null || _instanceId is null || _phone is null)
             throw new InvalidDataException("Идентификаторы сеанса не инициализированы.");
-        _sessionStore.Save(new MaxSavedSession(_phone, token, _deviceId, _instanceId));
+        _sessionStore.Save(new MaxSavedSession(_phone, token, _deviceId, _instanceId,
+            _bindPhysical ? "TCP_PHYSICAL" : "TCP"));
         _requestToken = null;
         _passwordTrack = null;
         State = ConnectionState.Connected;
@@ -342,9 +362,10 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         bool systemProxyConfigured = false;
         _tlsAttemptCount = 0;
 
-        // Native TcpClient does not use Windows' system HTTP/SOCKS proxy.
-        // Try an explicitly configured system proxy before direct TCP. Only
-        // the verified TLS session can contain MAX account traffic.
+        // The physical-interface mode is per-application; it intentionally
+        // ignores the system proxy without changing Windows or VPN settings.
+        // The original mobile TCP mode retains its existing proxy behavior.
+        if (!_bindPhysical)
         foreach (string hostname in VerifiedHosts)
         {
             Uri? proxy = MaxSystemProxyTunnel.FindConfiguredProxy(hostname);
@@ -407,6 +428,9 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         var results = new Dictionary<string, string>(StringComparer.Ordinal);
         var addresses = new List<(string Host, IPAddress Ip)>();
 
+        IPAddress? physicalAddress = _bindPhysical
+            ? PhysicalMaxWebSocketChannel.FindPhysicalIPv4()
+            : null;
         // Visit different verified service domains BEFORE retrying the same
         // DNS name. Three consecutive attempts on api2.oneme.ru were all
         // closed at TLS ClientHello in the user's Windows environment.
@@ -417,7 +441,9 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             {
                 IPAddress[] resolved = await Dns.GetHostAddressesAsync(hostname, ct);
                 resolvedByHost[hostname] = resolved
-                    .Where(ip => ip.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
+                    .Where(ip => _bindPhysical
+                        ? ip.AddressFamily == AddressFamily.InterNetwork
+                        : ip.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
                     .Distinct()
                     .OrderBy(ip => ip.AddressFamily == AddressFamily.InterNetwork ? 0 : 1)
                     .Take(2).ToArray();
@@ -455,7 +481,11 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             _tlsCertificateSeen = false;
             _tlsCertificateTrusted = false;
 
-            var candidate = new TcpClient(address.AddressFamily);
+            // A source-address-bound TcpClient follows the proven Windows
+            // physical route while preserving TLS SNI and certificate checks.
+            var candidate = physicalAddress is null
+                ? new TcpClient(address.AddressFamily)
+                : new TcpClient(new IPEndPoint(physicalAddress, 0));
             SslStream? candidateSsl = null;
             try
             {

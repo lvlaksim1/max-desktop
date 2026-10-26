@@ -27,6 +27,7 @@
     <ComboBoxItem Content="WebSocket через .NET"/>
     <ComboBoxItem Content="TCP (мобильный протокол)"/>
     <ComboBoxItem Content="WebSocket через физический интерфейс (VPN включён)"/>
+    <ComboBoxItem Content="TCP Android через физический интерфейс (VPN включён)"/>
    </ComboBox>
    <Button x:Name="SendCodeButton" Content="Получить код" HorizontalAlignment="Stretch"
            Margin="0,11,0,0" Click="SendCode_Click"/>

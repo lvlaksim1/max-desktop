@@ -30,7 +30,7 @@ public sealed class PhysicalMaxWebSocketChannel : IMaxWebSocketChannel
     /// rejects TUN/TAP and other recognisable virtual VPN interfaces.
     /// Addresses are used only locally and are never logged or persisted.
     /// </summary>
-    private static IPAddress FindPhysicalIPv4()
+    internal static IPAddress FindPhysicalIPv4()
     {
         foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
         {

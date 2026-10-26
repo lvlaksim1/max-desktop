@@ -1,6 +1,6 @@
 namespace MaxDesktop.Protocol;
 
-public enum MaxConnectionPreference { Automatic, BrowserWebSocket, WebSocket, Tcp, PhysicalWebSocket }
+public enum MaxConnectionPreference { Automatic, BrowserWebSocket, WebSocket, Tcp, PhysicalWebSocket, TcpPhysical }
 
 /// <summary>
 /// Selects Chromium WebSocket (when available), .NET WebSocket or legacy TCP
@@ -14,6 +14,7 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
     private readonly NativeMaxWebSocketTransport _physical;
     private readonly NativeMaxWebSocketTransport? _browser;
     private readonly NativeMaxTransport _tcp;
+    private readonly NativeMaxTransport _tcpPhysical;
     private IMaxAuthenticationTransport _active;
 
     public HybridMaxTransport(IMaxSessionStore store, IMaxWebSocketChannel? browserChannel = null,
@@ -26,6 +27,7 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
         _browser = browserChannel is null ? null
             : new NativeMaxWebSocketTransport(store, browserChannel, "WEB_EDGE");
         _tcp = new NativeMaxTransport(store);
+        _tcpPhysical = new NativeMaxTransport(store, bindPhysicalInterface: true);
         _active = _physical;
     }
 
@@ -36,6 +38,7 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
     private IMaxAuthenticationTransport SelectByPreference() => PreferredMode switch
     {
         MaxConnectionPreference.Tcp => _tcp,
+        MaxConnectionPreference.TcpPhysical => _tcpPhysical,
         MaxConnectionPreference.PhysicalWebSocket => _physical,
         MaxConnectionPreference.WebSocket => _web,
         MaxConnectionPreference.BrowserWebSocket => _browser ?? _web,
@@ -120,6 +123,7 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
             "WEB_EDGE" when _browser is not null => _browser,
             "WEB" => _web,
             "WEB_PHYSICAL" => _physical,
+            "TCP_PHYSICAL" => _tcpPhysical,
             _ => _tcp
         };
         return await _active.RestoreSessionAsync(cancellationToken);
@@ -140,5 +144,6 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
         _physical.Dispose();
         _web.Dispose();
         _tcp.Dispose();
+        _tcpPhysical.Dispose();
     }
 }
