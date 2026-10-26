@@ -121,7 +121,7 @@ public partial class MainWindow : Window
 
     private void MiniAppButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: ChatActionButton action })
+        if (sender is not System.Windows.Controls.Button { DataContext: ChatActionButton action })
             return;
         if (!MaxMiniAppLink.TryResolve(action.WebApp, action.Payload, out Uri? uri) || uri is null)
         {

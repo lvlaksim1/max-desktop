@@ -31,7 +31,7 @@ public sealed class MiniAppWindow : Window
         var root = new DockPanel();
         var bar = new DockPanel { Margin = new Thickness(8) };
         DockPanel.SetDock(bar, Dock.Top);
-        var external = new Button { Content = "Открыть в браузере", Margin = new Thickness(6, 0, 0, 0) };
+        var external = new System.Windows.Controls.Button { Content = "Открыть в браузере", Margin = new Thickness(6, 0, 0, 0) };
         DockPanel.SetDock(external, Dock.Right);
         external.Click += (_, _) => Process.Start(new ProcessStartInfo(_address.AbsoluteUri)
         {
