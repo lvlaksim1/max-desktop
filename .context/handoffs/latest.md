@@ -1,9 +1,5 @@
-# MAX Desktop — передача менеджера, поколение 36, 27.10.2026
-
-Менеджер project-manager, репозиторий lvlaksim1/max-desktop/main. Восстановление через .context/ENTRYPOINT.md и контроль state-integrity.json 8/8.
-
-Задача владельца: реальный код из бота «Коды подтверждения» прямо в Windows MAX Desktop. Официальная справка MAX подтверждает SMS-путь для привязки нового доверенного устройства с 2FA в сценарии Госуслуг. Пароль 2FA устанавливают в мобильном MAX; SMS на вход в MAX Desktop уже работала и не равна SMS привязки.
-
-Исследован исходный Android MAX 26.35.1: JavaScript мосты WebViewHandler и PrivateWebViewHandler с postEvent(String,String); original bridge error response client.verify_mobile_id.no_cellular, JSON {requestId,error:{code}}. Публичный SDK max-web-app.js принимает через window.WebApp.sendEvent(name,json). Источники lvlaksim1/max-android-research docs/webapp-jsbridge-inspection-26.35.1.md и docs/public-max-bridge-js-sms-2026-10-27.md.
-
-Эксперимент v0.1.22 в MAX Desktop: MiniAppWindow.cs добавляет WebMessage-enabled scoped bridge для top-level HTTPS origin выданного MAX адреса и отвечает на WebAppVerifyMobileId штатным no_cellular; MaxMiniAppCellularUnavailable.cs чистая модель/валидация; tests/MaxDesktop.Protocol.Smoke. Нет SIM spoofing, нет SMS endpoint guessing, нет токенов/секретов в журнале. Windows build прогон завершён успешно, но появление формы SMS и реального кода в клиенте пока не проверено владельцем. Последняя готовность/публикация проверять по GitHub release, рабочие сеансы и VPN не менялись.
+# MAX Desktop — передача менеджера, поколение 37, 27.10.2026
+Менеджер repo lvlaksim1/max-desktop/main; восстановление .context/ENTRYPOINT.md; проверка state-integrity.json 8/8.
+Пользователь испытал v0.1.22 и показал «Проверяем номер телефона» в mini-app, без ручного поля номера. В MaxSavedSession.Phone телефон уже имеется, но это не проверка фактической SIM у оператора. Модель WebAppVerifyMobileIdRequest в APK принимает только requestId и url.
+Обнаружено, что в v0.1.22 публичный WebViewHandler.postEvent был пустым, хотя MAX SDK использует его для событий. В v0.1.23 исправлено: ограниченный (only WebAppVerifyMobileId) no_cellular negative response из WebViewHandler и PrivateWebViewHandler, проверка HTTPS origin, без токенов и доверенного Mobile ID. В окно передаётся номер выбранного аккаунта и отображаются стадии bridge ready / request seen / negative response forwarded. Изменены MiniAppWindow.cs и MainWindow.xaml.cs.
+Проверен build 40421564693, release workflow 40421564642; релиз https://github.com/lvlaksim1/max-desktop/releases/tag/v0.1.23, 2 установщика. Реальная форма СМС и просмотр защищённого кода **не подтверждены**, их нельзя обещать. Официальная справка MAX допускает SMS для определённой привязки с 2FA. Следующий шаг — пользователь сообщает только строку статуса моста, без паролей, токенов или кода. Системный VPN и рабочие сессии не менялись.
