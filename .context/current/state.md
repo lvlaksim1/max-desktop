@@ -1,7 +1,7 @@
-# MAX Desktop — 27.10.2026, завершена статическая трассировка Mobile ID
+# MAX Desktop — 2026-10-27, модифицированный исследовательский APK
 
-Последний выпущенный MAX Desktop v0.1.21, manager project-manager, repo lvlaksim1/max-desktop/main. После повторного входа у пользователя TCP(Android)/физическая сеть и server-signed WebAppPlatform=android; мини-приложение «Коды подтверждения» открывается, затем требует доверенную привязку устройства с SIM и мобильным интернетом.
-
-Точная сборка MAX Android 26.35.1 (6867), SHA256 e809176d..., декомпилирована целиком (24 272 Java файлов, MAX research CI 40409450577 success). Обнаружен приватный `WebAppVerifyMobileId`: requestId,url -> `dol` -> `ekl` `ConnectivityManager.requestNetwork(TRANSPORT_CELLULAR,INTERNET)` -> `fcl` сотовый HTTP-клиент -> code/headers/Base64-data -> приватный JS event. Ошибки no_cellular/cancelled. `getLine1Number`/`SubscriptionManager` не найдены; номер в запросе отсутствует. В MAX Desktop телефон уже есть в сохранённой сессии, но это не подтверждение реальной SIM.
-
-Текущий WebView2 не содержит приватного Mobile ID bridge и не имеет Android/сотовой сети; нельзя выдать ПК за доверенное устройство изменением UI/UA/поля номера. Причина 1–2 мин ожидания не доказана, серверная привязка не воспроизводилась. Исследование: docs/protocol/mobile-id-native-verification-deep-research-2026-10-27.md . Системный VPN и код MAX Desktop не изменены, новый релиз не выпускался.
+- MAX Desktop: последний опубликованный v0.1.21, мобильный TCP Android и серверный WebAppPlatform=android подтверждены пользователем; мини-приложение кодов требует штатной привязки устройства.
+- APK MAX 26.35.1 (6867) ранее статически исследован; механизм WebAppVerifyMobileId использует сотовое подключение Android.
+- В lvlaksim1/max-android-research добавлены tools/patch_mobileid_diagnostics.py и workflow build-mobileid-research-mod.yml. Run 40414205114 SUCCESS, артефакт 12693639279, APK SHA256 b5a8510caf37ab38ebe9a40dd7457b3e74106f9dbd507da52301bad31d00acba, размер 134098887 байт. Подписан отдельным тестовым сертификатом, корректность подписи v2/v3 проверена. Реальное Android-испытание ещё не проведено, замена официальной установки без удаления невозможна.
+- Мод записывает ТОЛЬКО обезличенные записи об обращении к Mobile ID и начале сотового HTTP в JSONL. Действительные токены/авторизационные заголовки/ответы Mobile ID/коды не экспортируются. Следовательно, пользователя нельзя вводить в заблуждение: это не средство переноса сеанса в MAX Desktop.
+- Подробности: https://github.com/lvlaksim1/max-android-research/blob/main/docs/mobileid-research-mod-2026-10-27.md. Рабочий Windows MAX Desktop, VPN и авторизация не изменены.
