@@ -1,0 +1,23 @@
+name: Probe Chromium MAX WebSocket anonymous INIT
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/MaxDesktop.Edge.Probe/**'
+      - '.github/workflows/max-edge-probe.yml'
+      - 'src/MaxDesktop.App/Resources/max-bridge.html'
+      - 'src/MaxDesktop.App/EdgeMaxWebSocketChannel.cs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  edge-websocket:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Execute Chromium network test without credentials
+        run: dotnet run --project tests/MaxDesktop.Edge.Probe/MaxDesktop.Edge.Probe.csproj -c Release

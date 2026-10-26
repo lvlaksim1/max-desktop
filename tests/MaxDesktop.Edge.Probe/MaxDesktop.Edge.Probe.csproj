@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/MaxDesktop.App/MaxDesktop.App.csproj"/>
+    <Content Include="../../src/MaxDesktop.App/Resources/max-bridge.html" Link="Resources/max-bridge.html" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+</Project>
