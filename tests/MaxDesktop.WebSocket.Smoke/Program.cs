@@ -89,6 +89,37 @@ using (var hybrid = new HybridMaxTransport(new CapturingStore(), new Determinist
     Check(smsFailure.SmsCount == 1, "no duplicate SMS on uncertain failure");
     Check(hybrid.State == ConnectionState.Failed, "physical mode SMS failure stays on same transport");
 }
+// A real server may require a human-operated captcha before issuing a code.
+// The first refused SMS request may be followed by CAPTCHA_REQUEST(224), but
+// never by an automatic second SMS request.
+var captchaChannel = new DeterministicChannel { RequiresHumanCaptcha = true };
+using (var hybrid = new HybridMaxTransport(
+    new CapturingStore(), new DeterministicChannel(), captchaChannel))
+{
+    hybrid.PreferredMode = MaxConnectionPreference.PhysicalWebSocket;
+    var challenge = await hybrid.BeginLoginAsync(dummyPhone);
+    Check(challenge.State == ConnectionState.AwaitingCaptcha, "captcha challenge state");
+    Check(challenge.CaptchaUrl?.StartsWith("https://id.vk.ru/not_robot_captcha",
+        StringComparison.Ordinal) == true, "approved captcha link");
+    Check(captchaChannel.CaptchaCount == 1 && captchaChannel.SmsCount == 1,
+        "one refused SMS request then one captcha query");
+    var result = await hybrid.CompleteCaptchaAsync("manual-user-solution-12345");
+    Check(result.State == ConnectionState.AwaitingVerification &&
+        captchaChannel.SmsCount == 2 && captchaChannel.CaptchaCount == 1,
+        "captcha completion triggers one deliberate SMS request");
+}
+var cancelledCaptchaChannel = new DeterministicChannel { RequiresHumanCaptcha = true };
+using (var hybrid = new HybridMaxTransport(
+    new CapturingStore(), new DeterministicChannel(), cancelledCaptchaChannel))
+{
+    hybrid.PreferredMode = MaxConnectionPreference.PhysicalWebSocket;
+    var challenge = await hybrid.BeginLoginAsync(dummyPhone);
+    Check(challenge.State == ConnectionState.AwaitingCaptcha, "cancel challenge setup");
+    await hybrid.CancelPendingLoginAsync();
+    Check(cancelledCaptchaChannel.SmsCount == 1 &&
+        hybrid.State == ConnectionState.Disconnected, "cancel must not retry SMS");
+}
+Console.WriteLine("Manual VK captcha challenge/resume/cancel/no duplicate SMS: PASS");
 Console.WriteLine("Browser/managed WEB channel separation, SMS and login state, no-duplicate-code rule: PASS");
 
 Console.WriteLine("MAX WEB JSON protocol, SMS payload, selection, and backward-compatible session: PASS");
@@ -113,6 +144,8 @@ sealed class DeterministicChannel : IMaxWebSocketChannel
     private readonly Queue<string> _responses = new();
     public bool IsOpen { get; private set; }
     public bool RejectSmsResponse { get; set; }
+    public bool RequiresHumanCaptcha { get; set; }
+    public int CaptchaCount { get; private set; }
     public int SmsCount { get; private set; }
     public Task ConnectAsync(CancellationToken ct)
     {
@@ -125,15 +158,25 @@ sealed class DeterministicChannel : IMaxWebSocketChannel
         var json = doc.RootElement;
         int opcode = json.GetProperty("opcode").GetInt32();
         int seq = json.GetProperty("seq").GetInt32();
+        if (opcode == 17) SmsCount++;
+        if (opcode == 224) CaptchaCount++;
+        bool hasCaptcha = json.GetProperty("payload").TryGetProperty("captchaToken", out var token) &&
+            token.ValueKind == JsonValueKind.String;
+        if (opcode == 17 && RequiresHumanCaptcha && !hasCaptcha)
+        {
+            _responses.Enqueue($"{{\"ver\":11,\"cmd\":3,\"seq\":{seq},\"opcode\":17," +
+                "\"payload\":{\"error\":\"captcha.required\",\"localizedMessage\":\"Проверка не пройдена, попробуйте ещё раз\"}}");
+            return Task.CompletedTask;
+        }
         string payload = opcode switch
         {
             6 => "{}",
             17 => """{"token":"test-otp-only","codeLength":6}""",
             18 => """{"tokenAttrs":{"LOGIN":{"token":"fake-login-token"}}}""",
             19 => "{}",
+            224 => """{"link":"https://id.vk.ru/not_robot_captcha?domain=web.max.ru&session_token=test-only"}""",
             _ => "{}"
         };
-        if (opcode == 17) SmsCount++;
         if (opcode != 17 || !RejectSmsResponse)
             _responses.Enqueue($"{{\"ver\":11,\"cmd\":1,\"seq\":{seq},\"opcode\":{opcode},\"payload\":{payload}}}");
         return Task.CompletedTask;
