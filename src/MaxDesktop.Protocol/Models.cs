@@ -3,6 +3,7 @@ namespace MaxDesktop.Protocol;
 public enum ConnectionState { Disconnected, Connecting, AwaitingVerification, AwaitingPassword, AwaitingCaptcha, Connected, Failed }
 public sealed record ChatSummary(long Id, string Title, string Preview, int UnreadCount);
 public sealed record ChatMessage(long Id, long ChatId, string Sender, string Text, DateTimeOffset SentAt);
+public sealed record ChatHistoryPage(IReadOnlyList<ChatMessage> Messages, long? NextBefore, bool HasMore);
 public sealed record AuthResult(ConnectionState State, string? Error, int? CodeLength = null, string? PasswordHint = null, string? CaptchaUrl = null);
 
 /// <summary>Pure UI status selection: a validation failure must never look like a new SMS request.</summary>
@@ -45,6 +46,9 @@ public interface IMaxTransport
     Task<AuthResult> VerifyCodeAsync(string verificationCode, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ChatSummary>> GetChatsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ChatMessage>> GetMessagesAsync(long chatId, CancellationToken cancellationToken = default);
+    Task<ChatHistoryPage> GetHistoryPageAsync(long chatId, long? beforeTime = null,
+        int count = MaxHistoryCodec.PageSize, CancellationToken cancellationToken = default) =>
+        Task.FromException<ChatHistoryPage>(new NotSupportedException("История сообщений недоступна."));
     Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken = default);
 }
 

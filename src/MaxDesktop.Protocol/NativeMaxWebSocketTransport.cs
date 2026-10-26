@@ -533,8 +533,25 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
         }
         finally { _authGate.Release(); }
     }
-    public Task<IReadOnlyList<ChatMessage>> GetMessagesAsync(long chatId, CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<ChatMessage>>([]);
+    public async Task<ChatHistoryPage> GetHistoryPageAsync(long chatId, long? beforeTime = null,
+        int count = MaxHistoryCodec.PageSize, CancellationToken cancellationToken = default)
+    {
+        var request = MaxHistoryCodec.CreateRequest(chatId,
+            beforeTime ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), count);
+        await _authGate.WaitAsync(cancellationToken);
+        try
+        {
+            EnsureNotDisposed();
+            if (State != ConnectionState.Connected)
+                throw new InvalidOperationException("Сначала войдите в MAX.");
+            var response = await RequestAsync(MaxHistoryCodec.Opcode, request, cancellationToken);
+            return MaxHistoryCodec.DecodeWeb(chatId, response.Payload, count);
+        }
+        finally { _authGate.Release(); }
+    }
+    public async Task<IReadOnlyList<ChatMessage>> GetMessagesAsync(long chatId,
+        CancellationToken cancellationToken = default) =>
+        (await GetHistoryPageAsync(chatId, cancellationToken: cancellationToken)).Messages;
     public Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken = default) =>
         Task.FromException(new NotSupportedException("Обмен сообщениями WebSocket ещё не реализован."));
 

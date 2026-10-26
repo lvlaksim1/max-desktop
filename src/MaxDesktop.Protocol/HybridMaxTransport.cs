@@ -135,6 +135,9 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
         _active.GetChatsAsync(cancellationToken);
     public Task<IReadOnlyList<ChatMessage>> GetMessagesAsync(long chatId, CancellationToken cancellationToken = default) =>
         _active.GetMessagesAsync(chatId, cancellationToken);
+    public Task<ChatHistoryPage> GetHistoryPageAsync(long chatId, long? beforeTime = null,
+        int count = MaxHistoryCodec.PageSize, CancellationToken cancellationToken = default) =>
+        _active.GetHistoryPageAsync(chatId, beforeTime, count, cancellationToken);
     public Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken = default) =>
         _active.SendMessageAsync(chatId, text, cancellationToken);
 
