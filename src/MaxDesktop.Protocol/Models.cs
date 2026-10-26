@@ -6,7 +6,7 @@ public sealed record ChatMessage(long Id, long ChatId, string Sender, string Tex
 public sealed record AuthResult(ConnectionState State, string? Error, int? CodeLength = null, string? PasswordHint = null);
 
 
-public sealed record MaxSavedSession(string Phone, string LoginToken, string DeviceId, string InstanceId);
+public sealed record MaxSavedSession(string Phone, string LoginToken, string DeviceId, string InstanceId, string Transport = "TCP");
 
 /// <summary>Session storage is injected so the protocol layer does not own Windows UI or DPAPI APIs.</summary>
 public interface IMaxSessionStore
