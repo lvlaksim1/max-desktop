@@ -55,6 +55,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     private string _lastTriedHost = "api2.oneme.ru";
     private string? _connectedHost;
     private string _endpointDiagnostics = "";
+    private bool _connectedViaSystemProxy;
     // These markers never contain a phone, verification code or authorization token.
     private string _connectionPhase = "ОЖИДАНИЕ";
     public string LastConnectionPhase => _connectionPhase;
@@ -87,7 +88,9 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                 await OpenConnectionAsync(testDeviceId, testInstanceId, cancellationToken);
                 _connectionPhase = "SESSION_INIT_OK";
                 return new AuthResult(ConnectionState.Disconnected,
-                    $"Проверка успешна: TCP, проверенный TLS и SESSION_INIT работают ({_connectedHost}). Номер телефона не передавался.");
+                    $"Проверка успешна: TLS и SESSION_INIT работают ({_connectedHost}, " +
+                    (_connectedViaSystemProxy ? "через системный прокси" : "напрямую") +
+                    "). Номер телефона не передавался.");
             }
             catch (Exception ex) when (IsExpected(ex))
             {
@@ -332,9 +335,76 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
 
     private async Task ConnectVerifiedTlsAsync(CancellationToken ct)
     {
-        _connectionPhase = "DNS_RESOLVE";
+        _connectionPhase = "PROXY_DISCOVERY";
         _connectedHost = null;
+        _connectedViaSystemProxy = false;
         _endpointDiagnostics = "";
+        var proxyResults = new Dictionary<string, string>(StringComparer.Ordinal);
+        bool systemProxyConfigured = false;
+        _tlsAttemptCount = 0;
+
+        // Native TcpClient does not use Windows' system HTTP/SOCKS proxy.
+        // Try an explicitly configured system proxy before direct TCP. Only
+        // the verified TLS session can contain MAX account traffic.
+        foreach (string hostname in VerifiedHosts)
+        {
+            Uri? proxy = MaxSystemProxyTunnel.FindConfiguredProxy(hostname);
+            if (proxy is null) continue;
+            systemProxyConfigured = true;
+            if (_tlsAttemptCount > 0) await Task.Delay(TimeSpan.FromSeconds(5), ct);
+            _tlsAttemptCount++;
+            _lastTriedHost = hostname;
+            _tlsCertificateSeen = false;
+            _tlsCertificateTrusted = false;
+            MaxSystemProxyTunnel.Tunnel? tunnel = null;
+            SslStream? tls = null;
+            try
+            {
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attempt.CancelAfter(TimeSpan.FromSeconds(15));
+
+                _connectionPhase = "PROXY_CONNECT";
+                tunnel = await MaxSystemProxyTunnel.OpenAsync(
+                    proxy, hostname, Port, attempt.Token);
+                _connectionPhase = "TLS_HANDSHAKE";
+                tls = new SslStream(tunnel.Stream, leaveInnerStreamOpen: false,
+                    (sender, certificate, chain, errors) =>
+                    {
+                        _tlsCertificateSeen = certificate is not null;
+                        _tlsCertificateTrusted = MaxTlsCertificateValidator.Validate(
+                            sender, certificate, chain, errors);
+                        return _tlsCertificateTrusted;
+                    });
+                await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+                {
+                    TargetHost = hostname,
+                    EnabledSslProtocols = SslProtocols.None,
+                    CertificateRevocationCheckMode = X509RevocationMode.Online
+                }, attempt.Token);
+                _tcp = tunnel.Socket;
+                _ssl = tls;
+                _connectedHost = hostname;
+                _connectedViaSystemProxy = true;
+                _connectionPhase = "TLS_ESTABLISHED";
+                return;
+            }
+            catch (Exception ex) when ((IsExpected(ex) || ex is UnauthorizedAccessException) &&
+                !ct.IsCancellationRequested)
+            {
+                tls?.Dispose();
+                tunnel?.Stream.Dispose();
+                tunnel?.Socket.Dispose();
+                Exception cause = ex.GetBaseException();
+                string category = ex is UnauthorizedAccessException ? "ТРЕБУЕТ АВТОРИЗАЦИИ" :
+                    cause.Message.Contains("EOF", StringComparison.OrdinalIgnoreCase) ? "EOF" :
+                    _tlsCertificateSeen && !_tlsCertificateTrusted ? "СЕРТИФИКАТ" :
+                    ex is OperationCanceledException ? "ТАЙМ-АУТ" :
+                    _connectionPhase == "PROXY_CONNECT" ? "СБОЙ ПРОКСИ" : cause.GetType().Name;
+                proxyResults[hostname] = category;
+            }
+        }
+
+        _connectionPhase = "DNS_RESOLVE";
         var results = new Dictionary<string, string>(StringComparer.Ordinal);
         var addresses = new List<(string Host, IPAddress Ip)>();
 
@@ -411,6 +481,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                 _tcp = candidate;
                 _ssl = candidateSsl;
                 _connectedHost = hostname;
+                _connectedViaSystemProxy = false;
                 _connectionPhase = "TLS_ESTABLISHED";
                 return;
             }
@@ -430,10 +501,17 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             }
         }
 
-        // Keep original EOF / certificate failure for privacy-safe diagnosis.
-        _endpointDiagnostics = string.Join("; ",
+        // Keep only per-host failure categories; never the proxy URL, IP,
+        // phone number, verification code or session token.
+        string directResults = string.Join("; ",
             VerifiedHosts.Where(results.ContainsKey)
                 .Select(host => host + "=" + results[host]));
+        string proxyText = systemProxyConfigured
+            ? "прокси: " + string.Join("; ",
+                VerifiedHosts.Where(proxyResults.ContainsKey)
+                    .Select(host => host + "=" + proxyResults[host])) + ". "
+            : "Системный прокси не настроен. ";
+        _endpointDiagnostics = proxyText + "напрямую: " + directResults;
         throw new IOException(
             $"Все {_tlsAttemptCount} попыток подключения к трём проверенным узлам MAX завершились неудачно.",
             lastFailure);
