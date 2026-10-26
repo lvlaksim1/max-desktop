@@ -87,7 +87,10 @@ jobs:
           $full = "dist/MaxDesktop_Setup_v$v.exe"
           $update = "dist/MaxDesktop_Update_v$v.exe"
           if (-not (Test-Path $full) -or -not (Test-Path $update)) { throw 'Missing installer files' }
-          if (gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null) {
+          # External CLI commands don't emit a PowerShell Boolean. Check their
+          # exit status; suppressing stdout otherwise always evaluates false.
+          gh release view $tag --repo $env:GITHUB_REPOSITORY --json tagName *> $null
+          if ($LASTEXITCODE -eq 0) {
             Write-Output "Release $tag already exists; not overwriting files"
             exit 0
           }
