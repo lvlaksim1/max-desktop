@@ -30,6 +30,8 @@ public partial class MainWindow : Window
     private long? _historyBefore;
     private long? _historyChatId;
     private readonly HashSet<long> _historyIds = new();
+    private CancellationTokenSource? _miniAppLaunchCancellation;
+    private bool _miniAppLaunchInProgress;
 
     public MainWindow()
     {
@@ -105,6 +107,7 @@ public partial class MainWindow : Window
             SettingsStore.Save(_settings);
             _chatRefreshCancellation?.Cancel();
             _historyCancellation?.Cancel();
+            _miniAppLaunchCancellation?.Cancel();
             _transport.Dispose();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -119,17 +122,57 @@ public partial class MainWindow : Window
         dialog.ShowDialog();
     }
 
-    private void MiniAppButton_Click(object sender, RoutedEventArgs e)
+    private async void MiniAppButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.Button { DataContext: ChatActionButton action })
+        if (sender is not System.Windows.Controls.Button { DataContext: ChatActionButton action } ||
+            _miniAppLaunchInProgress || _accountOperation)
             return;
-        if (!MaxMiniAppLink.TryResolve(action.WebApp, action.Payload, out Uri? uri) || uri is null)
+        if (_historyChatId is not long chatId || action.ContactId is not long botId || botId <= 0)
         {
-            StatusLabel.Text = "Неподдерживаемый адрес мини-приложения MAX.";
+            StatusLabel.Text = "В кнопке MAX отсутствует идентификатор бота. Запуск без него невозможен.";
             return;
         }
-        new MiniAppWindow(uri, action.Text) { Owner = this }.Show();
+        var selectedTransport = _transport;
+        string? selectedAccount = _currentAccountPhone;
+        var cancellation = new CancellationTokenSource();
+        _miniAppLaunchCancellation = cancellation;
+        _miniAppLaunchInProgress = true;
+        StatusLabel.Text = "Запрашиваю у MAX адрес мини-приложения...";
+        try
+        {
+            Uri signedUrl = await selectedTransport.GetMiniAppLaunchAsync(
+                chatId, botId, action.Payload, cancellation.Token);
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(selectedTransport, _transport) ||
+                selectedAccount != _currentAccountPhone || _historyChatId != chatId)
+                return;
+            StatusLabel.Text = "MAX подтвердил запуск мини-приложения.";
+            new MiniAppWindow(signedUrl, action.Text) { Owner = this }.Show();
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or
+            ArgumentException or TimeoutException or NotSupportedException or ObjectDisposedException)
+        {
+            if (!cancellation.IsCancellationRequested)
+                StatusLabel.Text = "Не удалось открыть мини-приложение: " + SafeMiniAppError(ex);
+        }
+        finally
+        {
+            if (ReferenceEquals(_miniAppLaunchCancellation, cancellation))
+                _miniAppLaunchCancellation = null;
+            _miniAppLaunchInProgress = false;
+            cancellation.Dispose();
+        }
     }
+
+    private static string SafeMiniAppError(Exception error) => error switch
+    {
+        InvalidDataException => "сервер вернул недопустимые данные запуска.",
+        ArgumentException => "неподдерживаемые параметры кнопки.",
+        TimeoutException => "истекло время ожидания ответа MAX.",
+        NotSupportedException => "запуск не поддерживается выбранным транспортом.",
+        ObjectDisposedException => "сеанс был закрыт.",
+        _ => "ошибка связи с MAX (" + error.GetType().Name + ")."
+    };
 
 
     private IMaxAuthenticationTransport CreateTransport(string? phone) =>
@@ -396,6 +439,7 @@ public partial class MainWindow : Window
 
     private void ResetHistory()
     {
+        _miniAppLaunchCancellation?.Cancel();
         _historyCancellation?.Cancel();
         ++_historyGeneration;
         _historyLoading = false;

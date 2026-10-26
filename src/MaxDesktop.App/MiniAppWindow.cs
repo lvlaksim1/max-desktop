@@ -1,5 +1,4 @@
-using System.Diagnostics;
-using System.IO;
+ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using MaxDesktop.Protocol;
@@ -8,7 +7,7 @@ using Microsoft.Web.WebView2.Wpf;
 
 namespace MaxDesktop.App;
 
-/// <summary>Isolated browser window; no MAX login tokens or fabricated signed WebAppData.</summary>
+/// <summary>Isolated browser for a server-signed BOT_WEB_APP URL; never disclose the URL.</summary>
 public sealed class MiniAppWindow : Window
 {
     private readonly Uri _address;
@@ -35,13 +34,8 @@ public sealed class MiniAppWindow : Window
         var root = new DockPanel();
         var bar = new DockPanel { Margin = new Thickness(8) };
         DockPanel.SetDock(bar, Dock.Top);
-        var external = new System.Windows.Controls.Button { Content = "Открыть в обычном браузере", Margin = new Thickness(6, 0, 0, 0) };
-        DockPanel.SetDock(external, Dock.Right);
-        external.Click += (_, _) => Process.Start(new ProcessStartInfo(_address.AbsoluteUri)
-        {
-            UseShellExecute = true
-        });
-        bar.Children.Add(external);
+        // The server-signed URL authenticates the selected account.
+        // Never offer to open it in a system browser or expose it in the UI.
         bar.Children.Add(_status);
         root.Children.Add(bar);
         root.Children.Add(_browser);
@@ -99,7 +93,7 @@ public sealed class MiniAppWindow : Window
             _browser.CoreWebView2.NavigationCompleted += (_, args) =>
             {
                 _status.Text = args.IsSuccess
-                    ? "Страница загружена через отдельный сетевой маршрут. Авторизация мини-приложения MAX пока не подтверждена."
+                    ? "Страница мини-приложения загружена по адресу, выданному сервером MAX."
                     : "Ошибка загрузки страницы: " + args.WebErrorStatus +
                       ". Для адресов MAX используется физическое подключение; проверьте доступность сайта.";
             };

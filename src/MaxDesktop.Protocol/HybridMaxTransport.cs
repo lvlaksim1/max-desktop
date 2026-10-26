@@ -140,6 +140,9 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
         _active.GetHistoryPageAsync(chatId, beforeTime, count, cancellationToken);
     public Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken = default) =>
         _active.SendMessageAsync(chatId, text, cancellationToken);
+    public Task<Uri> GetMiniAppLaunchAsync(long chatId, long botId, string? startParam = null,
+        CancellationToken cancellationToken = default) =>
+        _active.GetMiniAppLaunchAsync(chatId, botId, startParam, cancellationToken);
 
     public void Dispose()
     {

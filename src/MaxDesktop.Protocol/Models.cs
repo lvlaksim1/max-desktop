@@ -55,6 +55,9 @@ public interface IMaxTransport
         int count = MaxHistoryCodec.PageSize, CancellationToken cancellationToken = default) =>
         Task.FromException<ChatHistoryPage>(new NotSupportedException("История сообщений недоступна."));
     Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken = default);
+    Task<Uri> GetMiniAppLaunchAsync(long chatId, long botId, string? startParam = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<Uri>(new NotSupportedException("Этот транспорт не поддерживает мини-приложения."));
 }
 
 /// <summary>The UI remains usable offline; unverified network operations fail explicitly.</summary>

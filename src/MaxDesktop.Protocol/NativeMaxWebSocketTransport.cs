@@ -552,6 +552,22 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
     public async Task<IReadOnlyList<ChatMessage>> GetMessagesAsync(long chatId,
         CancellationToken cancellationToken = default) =>
         (await GetHistoryPageAsync(chatId, cancellationToken: cancellationToken)).Messages;
+
+    public async Task<Uri> GetMiniAppLaunchAsync(long chatId, long botId,
+        string? startParam = null, CancellationToken cancellationToken = default)
+    {
+        var request = MaxMiniAppLaunchCodec.CreateWebRequest(botId, chatId, startParam);
+        await _authGate.WaitAsync(cancellationToken);
+        try
+        {
+            EnsureNotDisposed();
+            if (State != ConnectionState.Connected)
+                throw new InvalidOperationException("Сначала войдите в MAX.");
+            var response = await RequestAsync(MaxMiniAppLaunchCodec.Opcode, request, cancellationToken);
+            return MaxMiniAppLaunchCodec.DecodeWeb(response.Payload);
+        }
+        finally { _authGate.Release(); }
+    }
     public Task SendMessageAsync(long chatId, string text, CancellationToken cancellationToken = default) =>
         Task.FromException(new NotSupportedException("Обмен сообщениями WebSocket ещё не реализован."));
 
