@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; connect-src wss://ws-api.oneme.ru; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none';">
+<title>MAX Desktop — внутреннее соединение</title>
+</head>
+<body>
+<script>
+(() => {
+  "use strict";
+  const bridge = "maxdesktop-edge-1";
+  const endpoint = "wss://ws-api.oneme.ru/websocket";
+  let socket = null;
+  let session = 0;
+  const emit = (type, id, extra = {}) => {
+    window.chrome.webview.postMessage({ bridge, type, id, ...extra });
+  };
+  const closeExisting = () => {
+    const old = socket;
+    socket = null;
+    if (old) {
+      old.onopen = null; old.onmessage = null;
+      old.onerror = null; old.onclose = null;
+      try { old.close(); } catch (_) { /* transport already closed */ }
+    }
+  };
+  window.chrome.webview.addEventListener("message", (event) => {
+    const req = event.data;
+    if (!req || req.bridge !== bridge || !Number.isSafeInteger(req.id)) return;
+    if (req.action === "connect") {
+      closeExisting();
+      session = req.id;
+      try {
+        const ws = new WebSocket(endpoint);
+        socket = ws;
+        ws.onopen = () => {
+          if (socket === ws) emit("open", session);
+        };
+        ws.onerror = () => {
+          if (socket === ws) emit("error", session);
+        };
+        ws.onclose = (e) => {
+          if (socket === ws) {
+            socket = null;
+            emit("closed", session, { code: e.code, clean: e.wasClean });
+          }
+        };
+        ws.onmessage = (e) => {
+          if (socket !== ws) return;
+          if (typeof e.data !== "string" || e.data.length > 2097152) {
+            emit("error", session);
+            closeExisting();
+            return;
+          }
+          emit("message", session, { data: e.data });
+        };
+      } catch (_) {
+        emit("error", session);
+      }
+    } else if (req.action === "send") {
+      if (req.id !== session) return;
+      if (socket && socket.readyState === WebSocket.OPEN &&
+          typeof req.data === "string" && req.data.length <= 2097152) {
+        try { socket.send(req.data); }
+        catch (_) { emit("error", session); }
+      } else {
+        emit("error", session);
+      }
+    } else if (req.action === "close") {
+      if (req.id !== session) return;
+      closeExisting();
+    }
+  });
+  emit("ready", 0);
+})();
+</script>
+</body>
+</html>
