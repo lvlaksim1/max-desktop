@@ -28,7 +28,8 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
     private readonly IMaxSessionStore _sessionStore;
     private readonly SemaphoreSlim _authGate = new(1, 1);
     private readonly SemaphoreSlim _requestGate = new(1, 1);
-    private ClientWebSocket? _socket;
+    private readonly IMaxWebSocketChannel _channel;
+    private readonly string _transportTag;
     private int _sequence;
     private string _stage = "WS_IDLE";
     private bool _disposed;
@@ -38,9 +39,12 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
     private string? _verificationToken;
     private string? _passwordTrack;
 
-    public NativeMaxWebSocketTransport(IMaxSessionStore sessionStore)
+    public NativeMaxWebSocketTransport(IMaxSessionStore sessionStore,
+        IMaxWebSocketChannel? channel = null, string transportTag = "WEB")
     {
         _sessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
+        _channel = channel ?? new DotNetMaxWebSocketChannel();
+        _transportTag = transportTag;
     }
 
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
@@ -202,7 +206,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
         {
             EnsureNotDisposed();
             var saved = _sessionStore.Load();
-            if (saved is null || saved.Transport != "WEB" || string.IsNullOrEmpty(saved.LoginToken))
+            if (saved is null || saved.Transport != _transportTag || string.IsNullOrEmpty(saved.LoginToken))
                 return new AuthResult(ConnectionState.Disconnected, null);
 
             State = ConnectionState.Connecting;
@@ -231,7 +235,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
         await LoginByTokenAsync(token, ct);
         if (_phone is null || _deviceId is null || _instanceId is null)
             throw new InvalidDataException("Неполные идентификаторы WebSocket-сеанса.");
-        _sessionStore.Save(new MaxSavedSession(_phone, token, _deviceId, _instanceId, "WEB"));
+        _sessionStore.Save(new MaxSavedSession(_phone, token, _deviceId, _instanceId, _transportTag));
         _verificationToken = null;
         _passwordTrack = null;
         State = ConnectionState.Connected;
@@ -255,48 +259,27 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
     private async Task OpenAndInitializeAsync(string deviceId, CancellationToken ct)
     {
         await DisconnectAsync();
-        ClientWebSocket? socket = null;
-        try
+        _stage = "WS_CONNECT";
+        await _channel.ConnectAsync(ct);
+        _stage = "WS_INIT";
+        await RequestAsync(InitOpcode, new
         {
-            _stage = "WS_CONNECT";
-            socket = new ClientWebSocket();
-            socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(25);
-            socket.Options.Proxy = HttpClient.DefaultProxy;
-            socket.Options.SetRequestHeader("Origin", MaxWebSocketCodec.Origin);
-            socket.Options.SetRequestHeader("User-Agent", WebUserAgent);
-            socket.Options.RemoteCertificateValidationCallback = MaxTlsCertificateValidator.Validate;
-            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            deviceId,
+            userAgent = new
             {
-                timeout.CancelAfter(TimeSpan.FromSeconds(18));
-                await socket.ConnectAsync(new Uri(MaxWebSocketCodec.Endpoint), timeout.Token);
+                deviceType = "WEB",
+                locale = "ru",
+                deviceLocale = "ru",
+                osVersion = "Windows 10",
+                deviceName = "Chrome",
+                headerUserAgent = WebUserAgent,
+                appVersion = "26.6.17",
+                screen = "1080x1920 1.0x",
+                timezone = "Europe/Moscow",
+                pushDeviceType = "WEBPUSH"
             }
-            _socket = socket;
-            _stage = "WS_INIT";
-            await RequestAsync(InitOpcode, new
-            {
-                deviceId,
-                userAgent = new
-                {
-                    deviceType = "WEB",
-                    locale = "ru",
-                    deviceLocale = "ru",
-                    osVersion = "Windows 10",
-                    deviceName = "Chrome",
-                    headerUserAgent = WebUserAgent,
-                    appVersion = "26.6.17",
-                    screen = "1080x1920 1.0x",
-                    timezone = "Europe/Moscow",
-                    pushDeviceType = "WEBPUSH"
-                }
-            }, ct);
-            _stage = "WS_READY";
-        }
-        catch
-        {
-            socket?.Dispose();
-            _socket = null;
-            throw;
-        }
+        }, ct);
+        _stage = "WS_READY";
     }
 
     private async Task<MaxWebSocketFrame> RequestAsync(int opcode, object payload, CancellationToken ct)
@@ -304,7 +287,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
         await _requestGate.WaitAsync(ct);
         try
         {
-            if (_socket is not { State: WebSocketState.Open } socket)
+            if (!_channel.IsOpen)
                 throw new IOException("WebSocket-соединение с MAX не установлено.");
 
             _stage = opcode switch
@@ -317,16 +300,16 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
                 _ => "WS_REQUEST"
             };
             int seq = Interlocked.Increment(ref _sequence);
-            byte[] request = Encoding.UTF8.GetBytes(MaxWebSocketCodec.Encode(seq, opcode, payload));
+            string request = MaxWebSocketCodec.Encode(seq, opcode, payload);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
-            await socket.SendAsync(request.AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+            await _channel.SendTextAsync(request, timeout.Token);
 
             // Messages are read sequentially; unsolicited push messages do not
             // resolve a pending RPC response and never expose account data.
             for (int count = 0; count < 50; count++)
             {
-                string text = await ReadTextMessageAsync(socket, timeout.Token);
+                string text = await _channel.ReceiveTextAsync(timeout.Token);
                 MaxWebSocketFrame response = MaxWebSocketCodec.Decode(text);
                 if (response.Sequence != seq || response.Opcode != opcode)
                     continue;
@@ -339,26 +322,6 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
             throw new InvalidDataException("MAX вернул слишком много сообщений без ответа на запрос.");
         }
         finally { _requestGate.Release(); }
-    }
-
-    private static async Task<string> ReadTextMessageAsync(ClientWebSocket socket, CancellationToken ct)
-    {
-        using var buffer = new MemoryStream();
-        byte[] chunk = new byte[8192];
-        WebSocketMessageType? type = null;
-        while (true)
-        {
-            var result = await socket.ReceiveAsync(chunk.AsMemory(), ct);
-            if (result.MessageType == WebSocketMessageType.Close)
-                throw new IOException("MAX закрыл соединение WebSocket.");
-            type ??= result.MessageType;
-            if (result.MessageType != WebSocketMessageType.Text || type != WebSocketMessageType.Text)
-                throw new InvalidDataException("MAX вернул неподдерживаемое бинарное WebSocket-сообщение.");
-            if (buffer.Length + result.Count > MaxFrameSize)
-                throw new InvalidDataException("Размер сообщения MAX превышает ограничение.");
-            buffer.Write(chunk, 0, result.Count);
-            if (result.EndOfMessage) return Encoding.UTF8.GetString(buffer.ToArray());
-        }
     }
 
     private static bool TryProperty(JsonElement element, string key, out JsonElement value)
@@ -395,7 +358,25 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
     {
         if (ex is MaxWebSocketServerException server) return $"{_stage}: {server.Message}";
         if (ex is OperationCanceledException) return $"{_stage}: время ожидания истекло или операция отменена.";
-        if (ex is WebSocketException) return $"{_stage}: ошибка сетевого подключения WebSocket ({ex.GetType().Name}).";
+        if (ex is WebSocketException web)
+        {
+            var chain = new List<string> { $"WebSocket={web.WebSocketErrorCode}" };
+            for (Exception? inner = web.InnerException; inner is not null && chain.Count < 5; inner = inner.InnerException)
+            {
+                if (inner is System.Net.Sockets.SocketException socket)
+                    chain.Add($"Сеть={socket.SocketErrorCode}");
+                else if (inner is HttpRequestException http)
+                    chain.Add($"HTTP={(int?)http.StatusCode ?? 0}");
+                else if (inner is System.Security.Authentication.AuthenticationException)
+                    chain.Add("TLS=ошибка сертификата");
+                else if (inner is IOException io &&
+                         (io.Message.Contains("EOF", StringComparison.OrdinalIgnoreCase) ||
+                          io.Message.Contains("0 bytes", StringComparison.OrdinalIgnoreCase)))
+                    chain.Add("TLS=EOF до завершения соединения");
+                else chain.Add(inner.GetType().Name);
+            }
+            return $"{_stage}: сбой WebSocket ({string.Join(", ", chain)}).";
+        }
         if (ex is System.Security.Authentication.AuthenticationException)
             return $"{_stage}: серверный TLS-сертификат WebSocket не прошёл проверку.";
         if (ex is InvalidDataException) return $"{_stage}: {ex.Message}";
@@ -409,19 +390,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
             System.Security.Authentication.AuthenticationException or
             System.Security.Cryptography.CryptographicException;
 
-    private async Task DisconnectAsync()
-    {
-        var socket = _socket;
-        _socket = null;
-        if (socket is not null)
-        {
-            // Aborting avoids indefinite waits on a network peer that has already
-            // dropped TLS. This never sends logout or deletes saved credentials.
-            socket.Abort();
-            socket.Dispose();
-        }
-        await Task.CompletedTask;
-    }
+    private Task DisconnectAsync() => _channel.DisconnectAsync();
 
     public async Task LogoutAsync(CancellationToken cancellationToken = default)
     {
@@ -454,8 +423,7 @@ public sealed class NativeMaxWebSocketTransport : IMaxAuthenticationTransport
     {
         if (_disposed) return;
         _disposed = true;
-        _socket?.Abort();
-        _socket?.Dispose();
+        _channel.Dispose();
         _authGate.Dispose();
         _requestGate.Dispose();
     }
