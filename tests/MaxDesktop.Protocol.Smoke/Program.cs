@@ -189,6 +189,42 @@ Check(!MaxMiniAppLink.TryResolve("javascript:alert(1)", null, out _) &&
       "unsafe mini-app schemes and credentialed URLs rejected");
 Console.WriteLine("MAX OPEN_APP keyboards (native/web), HTTPS launch URL validation: PASS");
 
+// Isolated mini-app routing must not change Windows' VPN/proxy settings.
+// MAX hosts use the physical source IPv4; third-party domains keep system routing.
+Check(MiniAppNetworkProxy.IsMaxHost("max.ru") &&
+      MiniAppNetworkProxy.IsMaxHost("st.max.ru") &&
+      MiniAppNetworkProxy.IsMaxHost("ws-api.oneme.ru") &&
+      !MiniAppNetworkProxy.IsMaxHost("example.org") &&
+      !MiniAppNetworkProxy.IsMaxHost("evilmax.ru"),
+      "mini-app route only bypasses VPN for MAX domains");
+Check(MiniAppNetworkProxy.TryReadConnectHost("CONNECT max.ru:443 HTTP/1.1", out string hostname) &&
+      hostname == "max.ru" &&
+      !MiniAppNetworkProxy.TryReadConnectHost("CONNECT max.ru:80 HTTP/1.1", out _) &&
+      !MiniAppNetworkProxy.TryReadConnectHost("GET http://max.ru HTTP/1.1", out _) &&
+      !MiniAppNetworkProxy.TryReadConnectHost("CONNECT localhost:443 HTTP/1.1", out _) &&
+      !MiniAppNetworkProxy.TryReadConnectHost("CONNECT 127.0.0.1:443 HTTP/1.1", out _) &&
+      !MiniAppNetworkProxy.TryReadConnectHost("CONNECT 192.168.1.1:443 HTTP/1.1", out _) &&
+      !MiniAppNetworkProxy.TryReadConnectHost("CONNECT host.example:443\\r\\nX-Test: y HTTP/1.1", out _) &&
+      MiniAppNetworkProxy.IsPublicIPv4(System.Net.IPAddress.Parse("8.8.8.8")) &&
+      !MiniAppNetworkProxy.IsPublicIPv4(System.Net.IPAddress.Parse("10.0.0.2")),
+      "reject local-network, non-TLS and malformed proxy destinations");
+using (var localProxy = new MiniAppNetworkProxy(System.Net.IPAddress.Loopback))
+using (var client = new System.Net.Sockets.TcpClient())
+{
+    await client.ConnectAsync(System.Net.IPAddress.Loopback, localProxy.Port);
+    using var network = client.GetStream();
+    await network.WriteAsync(System.Text.Encoding.ASCII.GetBytes(
+        "CONNECT 127.0.0.1:443 HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n"
+        .Replace("\\\\r", "\\r").Replace("\\\\n", "\\n")));
+    byte[] response = new byte[256];
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+    int received = await network.ReadAsync(response, timeout.Token);
+    Check(System.Text.Encoding.ASCII.GetString(response, 0, received)
+          .StartsWith("HTTP/1.1 403", StringComparison.Ordinal),
+          "mini-app loopback proxy refuses internal endpoints");
+}
+Console.WriteLine("Mini-app HTTPS CONNECT policy / local refusal: PASS");
+
 // Round-trip the field types actually needed by MAX's native handshake and SMS login.
 var map = new Dictionary<string, object?>
 {
