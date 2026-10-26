@@ -22,8 +22,9 @@
    <TextBlock Text="Способ подключения" Margin="0,10,0,7"/>
    <ComboBox x:Name="TransportPicker" Height="34" SelectedIndex="0"
              ToolTip="WebSocket использует WEB-протокол. TCP — прежний мобильный транспорт. QR не используется.">
-    <ComboBoxItem Content="Автоматически (сначала WebSocket)"/>
-    <ComboBoxItem Content="WebSocket (веб-протокол)"/>
+    <ComboBoxItem Content="Автоматически (сначала Microsoft Edge)"/>
+    <ComboBoxItem Content="WebSocket через браузер Edge"/>
+    <ComboBoxItem Content="WebSocket через .NET"/>
     <ComboBoxItem Content="TCP (мобильный протокол)"/>
    </ComboBox>
    <Button x:Name="SendCodeButton" Content="Получить код" HorizontalAlignment="Stretch"

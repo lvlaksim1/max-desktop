@@ -22,8 +22,9 @@ public partial class LoginWindow : Window
         if (_transport is not HybridMaxTransport hybrid) return;
         hybrid.PreferredMode = TransportPicker.SelectedIndex switch
         {
-            1 => MaxConnectionPreference.WebSocket,
-            2 => MaxConnectionPreference.Tcp,
+            1 => MaxConnectionPreference.BrowserWebSocket,
+            2 => MaxConnectionPreference.WebSocket,
+            3 => MaxConnectionPreference.Tcp,
             _ => MaxConnectionPreference.Automatic
         };
     }
@@ -50,7 +51,7 @@ public partial class LoginWindow : Window
     {
         if (_busy) return;
         Busy(true);
-        StatusText.Text = "Проверка TCP, TLS и начального соединения без номера телефона...";
+        StatusText.Text = "Проверка выбранного транспорта без номера телефона...";
         try
         {
             ApplyTransportPreference();
@@ -173,6 +174,7 @@ public partial class LoginWindow : Window
         VerifyCodeButton.IsEnabled = !state;
         VerifyPasswordButton.IsEnabled = !state;
         PhoneBox.IsEnabled = !state;
+        TransportPicker.IsEnabled = !state;
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)

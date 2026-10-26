@@ -13,7 +13,7 @@ namespace MaxDesktop.App;
 public partial class MainWindow : Window
 {
     private readonly UserSettings _settings;
-    private readonly IMaxAuthenticationTransport _transport = new HybridMaxTransport(new ProtectedMaxSessionStore());
+    private readonly IMaxAuthenticationTransport _transport;
     private readonly ObservableCollection<ChatSummary> _chats = new();
     private readonly ObservableCollection<ChatMessage> _messages = new();
 
@@ -22,6 +22,9 @@ public partial class MainWindow : Window
         _settings = SettingsStore.Load();
         SettingsStore.ApplyTheme(_settings);
         InitializeComponent();
+        _transport = new HybridMaxTransport(
+            new ProtectedMaxSessionStore(),
+            new EdgeMaxWebSocketChannel(MaxEdgeChannel));
         ChatList.ItemsSource = _chats;
         MessageList.ItemsSource = _messages;
         Title = "MAX Desktop — v" + typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
