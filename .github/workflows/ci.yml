@@ -36,6 +36,8 @@ jobs:
         run: dotnet build src/MaxDesktop.App/MaxDesktop.App.csproj -c Release
       - name: Build update agent
         run: dotnet build src/MaxDesktop.UpdateAgent/MaxDesktop.UpdateAgent.csproj -c Release
+      - name: Verify login dialog Close control preserves parent window
+        run: dotnet run --project tests/MaxDesktop.LoginWindow.Smoke/MaxDesktop.LoginWindow.Smoke.csproj -c Release
       - name: Verify fail-closed transport
         run: dotnet run --project tests/MaxDesktop.Protocol.Smoke/MaxDesktop.Protocol.Smoke.csproj -c Release
       - name: Verify WebSocket SMS protocol and transport selection (offline)

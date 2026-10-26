@@ -201,25 +201,21 @@ public partial class LoginWindow : Window
         TransportPicker.IsEnabled = !state;
     }
 
-    private bool _closedAuthCleanup;
-
-    private async void Window_Closing(object? sender, CancelEventArgs e)
+    private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        // Closing a modal WPF dialog must never await and then call Close()
+        // reentrantly; doing so can invalidate the ShowDialog dispatcher.
         if (_busy && !_authenticated)
-        {
             e.Cancel = true;
+    }
+
+    private async void Window_Closed(object? sender, EventArgs e)
+    {
+        // Merely selecting a connection mode creates no server session.
+        if (_authenticated || _transport.State == ConnectionState.Disconnected)
             return;
-        }
-        if (!_authenticated && !_closedAuthCleanup)
-        {
-            // Keep the dialog open until its pending OTP/CAPTCHA session is
-            // discarded. A newly opened dialog can then run diagnostics.
-            e.Cancel = true;
-            _closedAuthCleanup = true;
-            try { await _transport.CancelPendingLoginAsync(); }
-            catch (Exception) { /* Closing is still permitted. */ }
-            Close();
-        }
+        try { await _transport.CancelPendingLoginAsync(); }
+        catch (Exception) { /* Closed windows must not terminate MAX Desktop. */ }
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)

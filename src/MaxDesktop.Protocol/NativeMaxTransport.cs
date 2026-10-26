@@ -663,6 +663,8 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         if (error is Dictionary<string, object?> nested)
             error = Field(nested, "message") ?? Field(nested, "type") ?? Field(nested, "code");
         string message = error?.ToString() ?? "сервер отклонил запрос";
+        if (message.Equals("error.profile.active.session.no2fa", StringComparison.OrdinalIgnoreCase))
+            return "error.profile.active.session.no2fa: MAX не разрешает новую сессию при уже активной сессии аккаунта без настроенного пароля для входа (2FA).";
         return message.Length > 160 ? message[..160] : message;
     }
 

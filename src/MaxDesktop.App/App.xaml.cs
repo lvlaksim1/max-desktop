@@ -13,6 +13,9 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Only the main application window controls process shutdown.
+        // A closed login dialog must not terminate the tray application.
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
         base.OnStartup(e);
         _singleInstanceMutex = new Mutex(true, @"Local\MaxDesktop.SingleInstance", out bool createdNew);
         if (!createdNew)
