@@ -17,7 +17,10 @@ namespace MaxDesktop.Protocol;
 /// </summary>
 public sealed class NativeMaxTransport : IMaxAuthenticationTransport
 {
-    private const string Host = "api2.oneme.ru";
+    // These three production nodes responded to protocol v10 SESSION_INIT
+    // through verified TLS on Windows in workflow 40248116311.
+    private static readonly string[] VerifiedHosts =
+        ["api2.oneme.ru", "api.oneme.ru", "api-tg.oneme.ru"];
     private const int Port = 443;
     private const ushort SessionInit = 6;
     private const ushort AuthRequest = 17;
@@ -49,6 +52,8 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     private bool _tlsCertificateSeen;
     private bool _tlsCertificateTrusted;
     private int _tlsAttemptCount;
+    private string _lastTriedHost = "api2.oneme.ru";
+    private string? _connectedHost;
     // These markers never contain a phone, verification code or authorization token.
     private string _connectionPhase = "ОЖИДАНИЕ";
     public string LastConnectionPhase => _connectionPhase;
@@ -81,7 +86,7 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                 await OpenConnectionAsync(testDeviceId, testInstanceId, cancellationToken);
                 _connectionPhase = "SESSION_INIT_OK";
                 return new AuthResult(ConnectionState.Disconnected,
-                    "Проверка успешна: TCP, проверенный TLS и SESSION_INIT работают. Номер телефона не передавался.");
+                    $"Проверка успешна: TCP, проверенный TLS и SESSION_INIT работают ({_connectedHost}). Номер телефона не передавался.");
             }
             catch (Exception ex) when (IsExpected(ex))
             {
@@ -327,34 +332,61 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
     private async Task ConnectVerifiedTlsAsync(CancellationToken ct)
     {
         _connectionPhase = "DNS_RESOLVE";
-        IPAddress[] resolved = await Dns.GetHostAddressesAsync(Host, ct);
-        IPAddress[] endpoints = resolved
-            .Where(ip => ip.AddressFamily == AddressFamily.InterNetwork)
-            .Concat(resolved.Where(ip => ip.AddressFamily == AddressFamily.InterNetworkV6))
-            .Distinct().Take(3).ToArray();
-        if (endpoints.Length == 0)
-            throw new IOException("DNS не вернул IP-адрес сервера MAX.");
+        _connectedHost = null;
+        var addresses = new List<(string Host, IPAddress Ip)>();
+
+        // Visit different verified service domains BEFORE retrying the same
+        // DNS name. Three consecutive attempts on api2.oneme.ru were all
+        // closed at TLS ClientHello in the user's Windows environment.
+        var resolvedByHost = new Dictionary<string, IPAddress[]>(StringComparer.Ordinal);
+        foreach (string hostname in VerifiedHosts)
+        {
+            try
+            {
+                IPAddress[] resolved = await Dns.GetHostAddressesAsync(hostname, ct);
+                resolvedByHost[hostname] = resolved
+                    .Where(ip => ip.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
+                    .Distinct()
+                    .OrderBy(ip => ip.AddressFamily == AddressFamily.InterNetwork ? 0 : 1)
+                    .Take(2).ToArray();
+            }
+            catch (Exception ex) when (IsExpected(ex) && !ct.IsCancellationRequested)
+            {
+                // One DNS failure does not suppress other verified domains.
+                resolvedByHost[hostname] = [];
+            }
+        }
+
+        // Maximum 6 outbound TCP/TLS attempts, spaced >= 5 seconds apart.
+        for (int round = 0; round < 2; round++)
+            foreach (string hostname in VerifiedHosts)
+                if (resolvedByHost.TryGetValue(hostname, out var ips) && ips.Length > round)
+                    addresses.Add((hostname, ips[round]));
+
+        if (addresses.Count == 0)
+            throw new IOException("Не удалось получить IP-адреса ни одного проверенного узла MAX.");
 
         Exception? lastFailure = null;
         _tlsAttemptCount = 0;
-        foreach (IPAddress endpoint in endpoints)
+        foreach (var (hostname, address) in addresses)
         {
             if (_tlsAttemptCount > 0)
                 await Task.Delay(TimeSpan.FromSeconds(5), ct);
 
             _tlsAttemptCount++;
-            var candidate = new TcpClient(endpoint.AddressFamily);
+            _lastTriedHost = hostname;
+            _tlsCertificateSeen = false;
+            _tlsCertificateTrusted = false;
+
+            var candidate = new TcpClient(address.AddressFamily);
             SslStream? candidateSsl = null;
             try
             {
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 timeout.CancelAfter(TimeSpan.FromSeconds(15));
-
                 _connectionPhase = "TCP_CONNECT";
-                await candidate.ConnectAsync(endpoint, Port, timeout.Token);
+                await candidate.ConnectAsync(address, Port, timeout.Token);
                 _connectionPhase = "TLS_HANDSHAKE";
-                _tlsCertificateSeen = false;
-                _tlsCertificateTrusted = false;
                 candidateSsl = new SslStream(candidate.GetStream(), false,
                     (sender, certificate, chain, errors) =>
                     {
@@ -363,17 +395,19 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                             sender, certificate, chain, errors);
                         return _tlsCertificateTrusted;
                     });
+
                 await candidateSsl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
                 {
-                    // The domain (not the resolved IP) remains the SNI host and
-                    // the verified DNS name for the remote certificate.
-                    TargetHost = Host,
+                    // TLS SNI and certificate hostname validation are always
+                    // bound to the actual verified DNS name (not the IP).
+                    TargetHost = hostname,
                     EnabledSslProtocols = SslProtocols.None,
                     CertificateRevocationCheckMode = X509RevocationMode.Online
                 }, timeout.Token);
 
                 _tcp = candidate;
                 _ssl = candidateSsl;
+                _connectedHost = hostname;
                 _connectionPhase = "TLS_ESTABLISHED";
                 return;
             }
@@ -385,9 +419,9 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
             }
         }
 
-        // Preserve the original cause, including an unexpected EOF.
+        // Keep original EOF / certificate failure for privacy-safe diagnosis.
         throw new IOException(
-            $"Не удалось установить защищённое соединение после {_tlsAttemptCount} попыток.",
+            $"Все {_tlsAttemptCount} попыток подключения к трём проверенным узлам MAX завершились неудачно.",
             lastFailure);
     }
 
@@ -522,9 +556,9 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                     : "Сертификат сервера ещё не был получен."
                 : "Транспортный поток закрылся до завершения запроса.";
             return $"Этап {_connectionPhase}: TLS/TCP-соединение оборвано (EOF). {detail} " +
-                   $"Попыток подключения: {_tlsAttemptCount}. Номер телефона и код здесь не проверялись.";
+                   $"Последний узел: {_lastTriedHost}. Попыток подключения: {_tlsAttemptCount}. Номер телефона и код здесь не проверялись.";
         }
-        return $"Этап {_connectionPhase}: {SafeError(ex)}";
+        return $"Этап {_connectionPhase}, узел {_lastTriedHost}, попыток {_tlsAttemptCount}: {SafeError(ex)}";
     }
 
     private static string SafeError(Exception ex)
