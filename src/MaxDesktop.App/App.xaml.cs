@@ -68,7 +68,7 @@ public partial class App : System.Windows.Application
         return System.Drawing.SystemIcons.Application;
     }
 
-    private void ExitApplication()
+    public void ExitApplication()
     {
         if (IsExitRequested) return;
         IsExitRequested = true;

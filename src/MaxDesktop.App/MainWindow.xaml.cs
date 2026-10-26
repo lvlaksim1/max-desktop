@@ -182,7 +182,12 @@ public partial class MainWindow : Window
             if (!File.Exists(agent)) throw new FileNotFoundException("Модуль установки обновлений не найден", agent);
             string args = $"\"{update.InstallerPath}\" {Environment.ProcessId} {update.Sha256}";
             Process.Start(new ProcessStartInfo(agent, args) { UseShellExecute = false });
-            System.Windows.Application.Current.Shutdown();
+            // Explicit update exit must bypass the X-to-tray cancellation;
+            // otherwise the update agent waits indefinitely for this process.
+            if (System.Windows.Application.Current is App app)
+                app.ExitApplication();
+            else
+                System.Windows.Application.Current.Shutdown();
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or
             System.Text.Json.JsonException or InvalidOperationException or System.ComponentModel.Win32Exception)
