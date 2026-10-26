@@ -48,8 +48,11 @@ public static class MaxHistoryCodec
                 throw new InvalidDataException("В истории MAX отсутствует ID или время сообщения.");
             var sender = Sender(item.GetValueOrDefault("sender"));
             string text = item.GetValueOrDefault("text") as string ?? "";
-            bool attachments = item.GetValueOrDefault("attaches") is object?[] a && a.Length > 0;
-            messages.Add(Message(chatId, id, time, sender, text, attachments));
+            object? attaches = item.GetValueOrDefault("attaches");
+            var buttons = NativeButtons(attaches);
+            bool attachments = attaches is object?[] a && a.Any(x =>
+                x is not Dictionary<string, object?> d || !d.ContainsKey("keyboard"));
+            messages.Add(Message(chatId, id, time, sender, text, attachments, buttons));
         }
         return Page(messages, items.Length, requestedCount);
     }
@@ -71,11 +74,86 @@ public static class MaxHistoryCodec
             string sender = item.TryGetProperty("sender", out var who) ? Sender(who) : "MAX";
             string text = item.TryGetProperty("text", out var raw) &&
                 raw.ValueKind == JsonValueKind.String ? raw.GetString() ?? "" : "";
-            bool attachments = item.TryGetProperty("attaches", out var attaches) &&
-                attaches.ValueKind == JsonValueKind.Array && attaches.GetArrayLength() > 0;
-            messages.Add(Message(chatId, id, time, sender, text, attachments));
+            bool hasAttaches = item.TryGetProperty("attaches", out var attaches) &&
+                attaches.ValueKind == JsonValueKind.Array;
+            var buttons = hasAttaches ? WebButtons(attaches) : Array.Empty<ChatActionButton>();
+            bool attachments = hasAttaches && attaches.EnumerateArray().Any(x =>
+                x.ValueKind != JsonValueKind.Object || !x.TryGetProperty("keyboard", out _));
+            messages.Add(Message(chatId, id, time, sender, text, attachments, buttons));
         }
         return Page(messages, items.GetArrayLength(), requestedCount);
+    }
+
+
+    // WEB JSON and native MessagePack can both include an inline keyboard in
+    // attaches[], with NO _type marker. Do not count the keyboard as media.
+    private static ChatActionButton[] NativeButtons(object? raw)
+    {
+        if (raw is not object?[] attachments) return Array.Empty<ChatActionButton>();
+        var result = new List<ChatActionButton>();
+        foreach (var attachment in attachments)
+        {
+            if (attachment is not Dictionary<string, object?> entry ||
+                entry.GetValueOrDefault("keyboard") is not Dictionary<string, object?> keyboard ||
+                keyboard.GetValueOrDefault("buttons") is not object?[] rows) continue;
+            foreach (var row in rows.Take(30))
+            {
+                if (row is not object?[] cells) continue;
+                foreach (var cell in cells.Take(7))
+                {
+                    if (cell is not Dictionary<string, object?> button ||
+                        button.GetValueOrDefault("text") is not string label ||
+                        button.GetValueOrDefault("type") is not string kind ||
+                        !kind.Equals("OPEN_APP", StringComparison.OrdinalIgnoreCase) ||
+                        button.GetValueOrDefault("webApp") is not string webApp ||
+                        label.Length is < 1 or > 128 ||
+                        !MaxMiniAppLink.TryResolve(webApp, button.GetValueOrDefault("payload") as string, out _))
+                        continue;
+                    long? contactId = Number(button.GetValueOrDefault("contactId"), out long id) ? id : null;
+                    result.Add(new ChatActionButton(label, webApp,
+                        button.GetValueOrDefault("payload") as string, contactId));
+                }
+            }
+        }
+        return result.ToArray();
+    }
+
+    private static ChatActionButton[] WebButtons(JsonElement attachments)
+    {
+        var result = new List<ChatActionButton>();
+        foreach (var attachment in attachments.EnumerateArray())
+        {
+            if (attachment.ValueKind != JsonValueKind.Object ||
+                !attachment.TryGetProperty("keyboard", out var keyboard) ||
+                keyboard.ValueKind != JsonValueKind.Object ||
+                !keyboard.TryGetProperty("buttons", out var rows) ||
+                rows.ValueKind != JsonValueKind.Array) continue;
+            foreach (var row in rows.EnumerateArray().Take(30))
+            {
+                if (row.ValueKind != JsonValueKind.Array) continue;
+                foreach (var button in row.EnumerateArray().Take(7))
+                {
+                    if (button.ValueKind != JsonValueKind.Object ||
+                        !button.TryGetProperty("text", out var labelValue) ||
+                        labelValue.ValueKind != JsonValueKind.String ||
+                        !button.TryGetProperty("type", out var kindValue) ||
+                        kindValue.ValueKind != JsonValueKind.String ||
+                        !string.Equals(kindValue.GetString(), "OPEN_APP", StringComparison.OrdinalIgnoreCase) ||
+                        !button.TryGetProperty("webApp", out var appValue) ||
+                        appValue.ValueKind != JsonValueKind.String) continue;
+                    string label = labelValue.GetString() ?? "";
+                    string webApp = appValue.GetString() ?? "";
+                    string? payload = button.TryGetProperty("payload", out var p) &&
+                        p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+                    if (label.Length is < 1 or > 128 ||
+                        !MaxMiniAppLink.TryResolve(webApp, payload, out _)) continue;
+                    long? contactId = button.TryGetProperty("contactId", out var c) &&
+                        Number(c, out long id) ? id : null;
+                    result.Add(new ChatActionButton(label, webApp, payload, contactId));
+                }
+            }
+        }
+        return result.ToArray();
     }
 
     private static ChatHistoryPage Page(List<ChatMessage> messages, int rawCount, int requested)
@@ -92,15 +170,15 @@ public static class MaxHistoryCodec
     }
 
     private static ChatMessage Message(long chatId, long id, long time,
-        string sender, string text, bool attachments)
+        string sender, string text, bool attachments, IReadOnlyList<ChatActionButton> buttons)
     {
         DateTimeOffset when;
         try { when = DateTimeOffset.FromUnixTimeMilliseconds(time); }
         catch (ArgumentOutOfRangeException)
         { throw new InvalidDataException("MAX вернул недопустимое время сообщения."); }
-        if (text.Length == 0)
+        if (text.Length == 0 && buttons.Count == 0)
             text = attachments ? "[Вложение — просмотр пока недоступен]" : "[Сообщение без текста]";
-        return new ChatMessage(id, chatId, sender, text, when);
+        return new ChatMessage(id, chatId, sender, text, when) { Buttons = buttons };
     }
 
     private static string Sender(object? obj) => obj switch

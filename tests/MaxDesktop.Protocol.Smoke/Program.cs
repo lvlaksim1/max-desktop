@@ -132,6 +132,63 @@ Check(lastPage.Messages.Count == 0 && !lastPage.HasMore && lastPage.NextBefore i
     "empty history is valid only with explicit messages array");
 Console.WriteLine("GET_HISTORY(49) MessagePack/JSON, cursors, safety: PASS");
 
+
+var syntheticKeyboard = new Dictionary<string, object?>
+{
+    ["messages"] = new object?[]
+    {
+        new Dictionary<string, object?>
+        {
+            ["id"] = 4001L, ["time"] = 1781000000000L, ["sender"] = 12L,
+            ["text"] = "Проверить заказ",
+            ["attaches"] = new object?[]
+            {
+                new Dictionary<string, object?> { ["_type"] = "PHOTO" },
+                new Dictionary<string, object?>
+                {
+                    ["keyboard"] = new Dictionary<string, object?>
+                    {
+                        ["buttons"] = new object?[]
+                        {
+                            new object?[]
+                            {
+                                new Dictionary<string, object?>
+                                {
+                                    ["type"] = "OPEN_APP", ["text"] = "Открыть",
+                                    ["webApp"] = "https://max.ru/TestShopBot",
+                                    ["payload"] = "order_1", ["contactId"] = 456L
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
+var nativeKeyboard = MaxMessagePack.Decode(MaxMessagePack.Encode(syntheticKeyboard))
+    as Dictionary<string, object?>;
+Check(nativeKeyboard is not null, "native keyboard MessagePack roundtrip");
+var buttonsNative = MaxHistoryCodec.DecodeNative(100, nativeKeyboard!, 30).Messages.Single().Buttons;
+Check(buttonsNative.Count == 1 && buttonsNative[0].Text == "Открыть" &&
+      buttonsNative[0].ContactId == 456 && buttonsNative[0].Payload == "order_1",
+      "native OPEN_APP button survives history decode");
+using (var keyboardJson = System.Text.Json.JsonDocument.Parse(
+    """{"messages":[{"id":4001,"time":1781000000000,"text":"Проверить заказ","attaches":[{"keyboard":{"buttons":[[{"type":"OPEN_APP","text":"Открыть","webApp":"https://max.ru/TestShopBot","payload":"order_1","contactId":456}]]}}]}]}"""))
+{
+    var buttonsWeb = MaxHistoryCodec.DecodeWeb(100, keyboardJson.RootElement, 30).Messages.Single().Buttons;
+    Check(buttonsWeb.Count == 1 && buttonsWeb[0] == buttonsNative[0], "web OPEN_APP matches native");
+}
+Check(MaxMiniAppLink.TryResolve("https://max.ru/TestShopBot", "order_1", out var link) &&
+      link!.AbsoluteUri == "https://max.ru/TestShopBot?startapp=order_1", "bot launch with start parameter");
+Check(MaxMiniAppLink.TryResolve("@TestShopBot", null, out var handleLink) &&
+      handleLink!.AbsoluteUri == "https://max.ru/TestShopBot?startapp", "bot username deep link");
+Check(!MaxMiniAppLink.TryResolve("javascript:alert(1)", null, out _) &&
+      !MaxMiniAppLink.TryResolve("http://example.org", null, out _) &&
+      !MaxMiniAppLink.TryResolve("https://evil@example.org/", null, out _),
+      "unsafe mini-app schemes and credentialed URLs rejected");
+Console.WriteLine("MAX OPEN_APP keyboards (native/web), HTTPS launch URL validation: PASS");
+
 // Round-trip the field types actually needed by MAX's native handshake and SMS login.
 var map = new Dictionary<string, object?>
 {

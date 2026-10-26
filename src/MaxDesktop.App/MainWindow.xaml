@@ -128,6 +128,15 @@
                    Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"
                    FontSize="13" Padding="0" VerticalScrollBarVisibility="Disabled"
                    HorizontalScrollBarVisibility="Disabled"/>
+          <ItemsControl ItemsSource="{Binding Buttons}" Margin="0,7,0,0">
+           <ItemsControl.ItemTemplate>
+            <DataTemplate>
+             <Button Content="{Binding Text}" Click="MiniAppButton_Click"
+                     HorizontalAlignment="Stretch" Margin="0,3,0,0"
+                     ToolTip="Открыть мини-приложение MAX"/>
+            </DataTemplate>
+           </ItemsControl.ItemTemplate>
+          </ItemsControl>
          </StackPanel>
         </Border>
        </DataTemplate>

@@ -119,6 +119,18 @@ public partial class MainWindow : Window
         dialog.ShowDialog();
     }
 
+    private void MiniAppButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: ChatActionButton action })
+            return;
+        if (!MaxMiniAppLink.TryResolve(action.WebApp, action.Payload, out Uri? uri) || uri is null)
+        {
+            StatusLabel.Text = "Неподдерживаемый адрес мини-приложения MAX.";
+            return;
+        }
+        new MiniAppWindow(uri, action.Text) { Owner = this }.Show();
+    }
+
 
     private IMaxAuthenticationTransport CreateTransport(string? phone) =>
         new HybridMaxTransport(_vault.Slot(phone),
