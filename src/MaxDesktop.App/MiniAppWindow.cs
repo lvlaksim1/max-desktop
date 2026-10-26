@@ -1,4 +1,5 @@
  using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using MaxDesktop.Protocol;
@@ -58,6 +59,81 @@ public sealed class MiniAppWindow : Window
         };
     }
 
+    // The original Android MAX registers these JS names at document creation.
+    // An ordinary Windows host has no Android cellular network. Rather than
+    // allowing the JS bridge request to time out silently, it returns only
+    // the original Android's "no_cellular" error. No operator call or trust
+    // assertion is emulated; the server decides whether SMS can be offered.
+    private static string CreateCellularUnavailableBridge(string signedOrigin)
+    {
+        const string script = """
+            (() => {
+                'use strict';
+                if (window !== window.top || location.origin !== SIGNED_ORIGIN) return;
+                const forward = (eventName, body) => {
+                    if (eventName !== 'WebAppVerifyMobileId' || typeof body !== 'string' || body.length > 16384) return;
+                    let payload;
+                    try { payload = JSON.parse(body); } catch { return; }
+                    if (!payload || typeof payload.requestId !== 'string') return;
+                    window.chrome?.webview?.postMessage({
+                        kind: 'mobile-id-no-cellular', requestId: payload.requestId
+                    });
+                };
+                Object.defineProperty(window, 'WebViewHandler', {
+                    value: Object.freeze({postEvent(_eventName, _body) {}}),
+                    writable: false, configurable: false
+                });
+                Object.defineProperty(window, 'PrivateWebViewHandler', {
+                    value: Object.freeze({postEvent: forward}),
+                    writable: false, configurable: false
+                });
+            })();
+            """;
+        // Insert only the URL origin: never expose the signed URL, query or
+        // fragment (which contain MAX account authentication information).
+        return script.Replace("SIGNED_ORIGIN", JsonSerializer.Serialize(signedOrigin),
+            StringComparison.Ordinal);
+    }
+
+    private async Task HandleMobileIdBridgeMessageAsync(
+        CoreWebView2WebMessageReceivedEventArgs args, string signedOrigin)
+    {
+        if (_closed || _browser.CoreWebView2 is null) return;
+        try
+        {
+            if (!Uri.TryCreate(args.Source, UriKind.Absolute, out Uri? source) ||
+                !source.GetLeftPart(UriPartial.Authority).Equals(signedOrigin,
+                    StringComparison.OrdinalIgnoreCase))
+                return;
+            using JsonDocument document = JsonDocument.Parse(args.WebMessageAsJson);
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("kind", out JsonElement kind) ||
+                kind.GetString() != "mobile-id-no-cellular" ||
+                !root.TryGetProperty("requestId", out JsonElement id) ||
+                id.ValueKind != JsonValueKind.String ||
+                !MaxMiniAppCellularUnavailable.TryCreateResponse(id.GetString(), out string response))
+                return;
+
+            // Only forward the explicit negative answer used by the original
+            // Android implementation; never construct successful Mobile ID data.
+            string js = "window.WebApp?.sendEvent?.(" +
+                        JsonSerializer.Serialize(MaxMiniAppCellularUnavailable.EventName) + "," +
+                        JsonSerializer.Serialize(response) + ");";
+            await _browser.CoreWebView2.ExecuteScriptAsync(js);
+            if (!_closed)
+                _status.Text = "Сотовая сеть Android на ПК отсутствует; передана штатная ошибка MAX. " +
+                               "Если сервер разрешает привязку через СМС для аккаунта с паролем, " +
+                               "этот вариант должен предложить сам MAX.";
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or
+            ArgumentException or System.Runtime.InteropServices.COMException or ObjectDisposedException)
+        {
+            // Malformed/untrusted messages must not crash an authenticated
+            // mini-app, and must never be written to logs or shown verbatim.
+        }
+    }
+
     private async void Browser_Loaded(object sender, RoutedEventArgs e)
     {
         try
@@ -86,7 +162,15 @@ public sealed class MiniAppWindow : Window
             var settings = _browser.CoreWebView2.Settings;
             settings.AreDevToolsEnabled = false;
             settings.AreHostObjectsAllowed = false;
-            settings.IsWebMessageEnabled = false;
+            // MAX's Android mini-app uses WebViewHandler/PrivateWebViewHandler.
+            // Enable the message channel only inside this isolated mini-app,
+            // and accept only the narrow, fail-closed Mobile ID error event.
+            settings.IsWebMessageEnabled = true;
+            string signedOrigin = _address.GetLeftPart(UriPartial.Authority);
+            string bridgeScript = CreateCellularUnavailableBridge(signedOrigin);
+            await _browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(bridgeScript);
+            _browser.CoreWebView2.WebMessageReceived += async (_, args) =>
+                await HandleMobileIdBridgeMessageAsync(args, signedOrigin);
             _browser.CoreWebView2.PermissionRequested += (_, args) =>
                 args.State = CoreWebView2PermissionState.Deny;
             _browser.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
