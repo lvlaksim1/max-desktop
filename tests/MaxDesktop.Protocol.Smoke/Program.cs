@@ -20,6 +20,46 @@ try
 }
 catch (NotSupportedException) { }
 
+// Synthetic test data only: no account, chats, or server requests.
+var chatsPayload = new Dictionary<string, object?>
+{
+    ["marker"] = 1700000000000L,
+    ["chats"] = new object?[]
+    {
+        new Dictionary<string, object?>
+        {
+            ["id"] = -123L,
+            ["title"] = "Тестовый канал",
+            ["newMessages"] = 3,
+            ["lastMessage"] = new Dictionary<string, object?> { ["text"] = "Тест" }
+        }
+    }
+};
+var nativeChatData = MaxMessagePack.Decode(MaxMessagePack.Encode(chatsPayload))
+    as Dictionary<string, object?>;
+Check(nativeChatData is not null, "native chat payload roundtrip");
+var nativeChatPage = MaxChatListCodec.DecodeNative(nativeChatData!);
+Check(nativeChatPage.Chats.Count == 1 &&
+      nativeChatPage.Chats[0].Id == -123 &&
+      nativeChatPage.Chats[0].UnreadCount == 3 &&
+      nativeChatPage.Chats[0].Preview == "Тест" &&
+      nativeChatPage.Marker == 1700000000000L, "native chat list fields");
+using (var jsonChats = System.Text.Json.JsonDocument.Parse(
+    "{\"marker\":1700000000000,\"chats\":[{\"id\":-123,\"title\":\"Тестовый канал\",\"newMessages\":3,\"lastMessage\":{\"text\":\"Тест\"}}]}"))
+{
+    var webChatPage = MaxChatListCodec.DecodeWeb(jsonChats.RootElement);
+    Check(webChatPage.Chats.Count == 1 &&
+          webChatPage.Chats[0].Id == nativeChatPage.Chats[0].Id &&
+          webChatPage.Chats[0].Preview == "Тест", "web chat list fields");
+}
+bool missingChatsRejected = false;
+try { MaxChatListCodec.DecodeNative(new Dictionary<string, object?>()); }
+catch (InvalidDataException) { missingChatsRejected = true; }
+Check(missingChatsRejected, "missing chats array is not a verified empty list");
+Check(MaxChatListCodec.Opcode == 53 && MaxChatListCodec.PageSize == 100,
+      "chat list request opcode and count");
+Console.WriteLine("Chat list MessagePack/JSON decoding without account data: PASS");
+
 // Round-trip the field types actually needed by MAX's native handshake and SMS login.
 var map = new Dictionary<string, object?>
 {
@@ -84,7 +124,10 @@ Check(native.State == ConnectionState.Disconnected, "native initial state");
 var malformed = await native.BeginLoginAsync("abc");
 Check(malformed.State == ConnectionState.Failed, "reject malformed phone before network");
 Check((await native.RestoreSessionAsync()).State == ConnectionState.Disconnected, "no stored token");
-Check((await native.GetChatsAsync()).Count == 0, "do not invent remote chats");
+bool unauthenticatedChatsRejected = false;
+try { await native.GetChatsAsync(); }
+catch (InvalidOperationException) { unauthenticatedChatsRejected = true; }
+Check(unauthenticatedChatsRejected, "unauthenticated chat fetch must be rejected");
 Console.WriteLine("Native MAX framing, MessagePack, LZ4, fingerprint, authentication boundary: PASS");
 
 
