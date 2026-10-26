@@ -118,6 +118,20 @@ public partial class LoginWindow : Window
         StatusText.Text = result.Error ?? "Сервер не подтвердил авторизацию.";
     }
 
+    private void CopyDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Only the user-visible diagnostic message is copied.
+            // Do not include phone, SMS code, password or session storage.
+            Clipboard.SetText(StatusText.Text);
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            StatusText.Text = "Не удалось скопировать сообщение в буфер обмена.";
+        }
+    }
+
     private void CancelOperation_Click(object sender, RoutedEventArgs e)
     {
         if (!_busy) return;

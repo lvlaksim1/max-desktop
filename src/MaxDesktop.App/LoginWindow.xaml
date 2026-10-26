@@ -44,11 +44,15 @@
     <Button x:Name="VerifyPasswordButton" Content="Проверить пароль"
             Margin="0,11,0,0" HorizontalAlignment="Stretch" Click="VerifyPassword_Click"/>
    </StackPanel>
-   <TextBlock x:Name="StatusText" Foreground="{DynamicResource MutedBrush}"
-       TextWrapping="Wrap" Margin="0,15,0,0"
+   <TextBox x:Name="StatusText" IsReadOnly="True" BorderThickness="0"
+       Foreground="{DynamicResource MutedBrush}" Background="Transparent"
+       TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+       Height="112" Margin="0,15,0,0" Padding="0" FontSize="12"
        Text="Сервер может запросить SMS, проверку звонком или дополнительный пароль. Возможности входа проверяются по мере исследования."/>
   </StackPanel>
   <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+    <Button Content="Копировать" Width="105" Margin="0,0,8,0"
+            Click="CopyDiagnostics_Click" ToolTip="Копировать текущий текст диагностики"/>
     <Button x:Name="CancelOperationButton" Content="Отменить" Width="105" Margin="0,0,8,0"
             Visibility="Collapsed" Click="CancelOperation_Click"/>
     <Button Content="Закрыть" Width="105" Margin="0" Click="Close_Click"/>
