@@ -8,6 +8,7 @@ public partial class LoginWindow : Window
 {
     private readonly IMaxAuthenticationTransport _transport;
     private bool _busy;
+    private bool _authenticated;
     private CancellationTokenSource? _operationCancel;
 
     public LoginWindow(IMaxAuthenticationTransport transport)
@@ -91,6 +92,7 @@ public partial class LoginWindow : Window
         if (result.State == ConnectionState.Connected)
         {
             StatusText.Text = "Сеанс MAX подтверждён сервером.";
+            _authenticated = true;
             DialogResult = true;
             return;
         }
@@ -148,7 +150,7 @@ public partial class LoginWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
-        if (_busy) e.Cancel = true;
+        if (_busy && !_authenticated) e.Cancel = true;
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)
