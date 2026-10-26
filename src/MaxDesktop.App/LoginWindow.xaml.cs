@@ -39,7 +39,22 @@ public partial class LoginWindow : Window
         {
             ApplyTransportPreference();
             var result = await _transport.BeginLoginAsync(PhoneBox.Text.Trim(), _operationCancel!.Token);
-            ShowResult(result);
+            if (result.State == ConnectionState.AwaitingCaptcha && result.CaptchaUrl is { } link)
+            {
+                StatusText.Text = "MAX запросил проверку «я не робот». Пройдите её в отдельном окне.";
+                var challenge = new CaptchaWindow(link) { Owner = this };
+                if (challenge.ShowDialog() == true && challenge.CaptchaToken is { } token)
+                {
+                    StatusText.Text = "Проверка завершена. Запрос кода...";
+                    ShowResult(await _transport.CompleteCaptchaAsync(token, _operationCancel!.Token));
+                }
+                else
+                {
+                    await _transport.CancelPendingLoginAsync();
+                    StatusText.Text = "Проверка человека отменена. Код не запрашивался повторно.";
+                }
+            }
+            else ShowResult(result);
         }
         catch (Exception ex)
         {
@@ -119,6 +134,11 @@ public partial class LoginWindow : Window
                 ? $"Код подтверждения ({length} цифр)" : "Код подтверждения";
             StatusText.Text = "Запрос принят. Введите код, полученный от MAX.";
             CodeBox.Focus();
+            return;
+        }
+        if (result.State == ConnectionState.AwaitingCaptcha)
+        {
+            StatusText.Text = "MAX запросил проверку человека.";
             return;
         }
         if (result.State == ConnectionState.AwaitingPassword)

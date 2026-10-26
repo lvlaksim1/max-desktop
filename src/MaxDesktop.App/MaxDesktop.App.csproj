@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Resources/max-bridge.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Resources/max-captcha.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../MaxDesktop.Protocol/MaxDesktop.Protocol.csproj" />

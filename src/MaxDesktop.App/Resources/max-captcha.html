@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src https://id.vk.ru https://id.vk.com; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<style>
+html,body{margin:0;padding:0;height:100%;background:#fff}
+iframe{border:0;width:100%;height:100%;display:block}
+</style>
+</head>
+<body>
+<iframe id="captcha" title="Проверка человека VK ID" referrerpolicy="origin"></iframe>
+<script>
+"use strict";
+const bridge="max-captcha-1";
+const frame=document.getElementById("captcha");
+const origins=new Set(["https://id.vk.ru","https://id.vk.com"]);
+const allowedUrl=(url)=>{
+  try{
+    const u=new URL(url);
+    return u.protocol==="https:" && origins.has(u.origin) &&
+      u.pathname.includes("not_robot_captcha");
+  }catch{return false;}
+};
+function candidate(value){
+  if(typeof value==="string"){
+    try{return candidate(JSON.parse(value));}catch{return null;}
+  }
+  if(!value || typeof value!=="object")return null;
+  const status=String(value.type||value.event||value.status||"").toLowerCase();
+  if(status.includes("error") || status.includes("fail") || status.includes("cancel"))
+    return null;
+  const nested=[value,value.data,value.payload,value.result].filter(x=>x&&typeof x==="object");
+  for(const obj of nested){
+    for(const key of ["captchaToken","captcha_token","success_token","successToken"]){
+      if(typeof obj[key]==="string" && obj[key].length>=16 && obj[key].length<=8192)
+        return obj[key];
+    }
+    if((status.includes("success") || status.includes("captcha") || status.includes("solved")) &&
+       typeof obj.token==="string" && obj.token.length>=16 && obj.token.length<=8192)
+      return obj.token;
+  }
+  return null;
+}
+window.addEventListener("message",(event)=>{
+  if(!origins.has(event.origin) || event.source!==frame.contentWindow)return;
+  const token=candidate(event.data);
+  if(token)window.chrome.webview.postMessage({bridge,type:"solved",token});
+});
+window.chrome.webview.addEventListener("message",(event)=>{
+  const data=event.data;
+  if(data && data.action==="open" && allowedUrl(data.url))
+    frame.src=data.url;
+});
+window.chrome.webview.postMessage({bridge,type:"ready"});
+</script>
+</body></html>

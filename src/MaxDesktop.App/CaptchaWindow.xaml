@@ -1,0 +1,31 @@
+<Window x:Class="MaxDesktop.App.CaptchaWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+ Title="Подтверждение входа MAX" Width="530" Height="660"
+ MinWidth="400" MinHeight="460" ResizeMode="CanResize"
+ WindowStartupLocation="CenterOwner" Loaded="Window_Loaded"
+ Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}">
+ <Grid Margin="16">
+  <Grid.RowDefinitions>
+   <RowDefinition Height="Auto"/>
+   <RowDefinition Height="*"/>
+   <RowDefinition Height="Auto"/>
+  </Grid.RowDefinitions>
+  <StackPanel Grid.Row="0" Margin="2,0,2,12">
+   <TextBlock Text="Проверяем, что вы не робот" FontSize="18" FontWeight="SemiBold"/>
+   <TextBlock Text="Выполните задание MAX. После подтверждения запросим код один раз."
+              FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"/>
+  </StackPanel>
+  <Border Grid.Row="1" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1">
+   <wv2:WebView2 x:Name="CaptchaBrowser"/>
+  </Border>
+  <DockPanel Grid.Row="2" LastChildFill="True" Margin="0,12,0,0">
+   <Button Content="Отменить" DockPanel.Dock="Right" Width="110"
+           HorizontalAlignment="Right" Click="Cancel_Click"/>
+   <TextBlock x:Name="StatusLabel" Text="Загрузка проверки..." 
+              Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" 
+              VerticalAlignment="Center" Margin="0,0,12,0"/>
+  </DockPanel>
+ </Grid>
+</Window>
