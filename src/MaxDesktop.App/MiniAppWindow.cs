@@ -16,6 +16,11 @@ public sealed class MiniAppWindow : Window
     private MiniAppNetworkProxy? _networkProxy;
     private string? _profileDirectory;
     private bool _closed;
+    private readonly string? _accountPhone;
+    private bool _bridgeReady;
+    private bool _mobileIdRequestSeen;
+    private bool _mobileIdErrorDelivered;
+    private string _navigationStatus = "Загрузка мини-приложения...";
     private readonly TextBlock _status = new()
     {
         Text = "Загрузка мини-приложения...",
@@ -23,9 +28,10 @@ public sealed class MiniAppWindow : Window
         TextWrapping = TextWrapping.Wrap
     };
 
-    public MiniAppWindow(Uri address, string caption)
+    public MiniAppWindow(Uri address, string caption, string? accountPhone)
     {
         _address = address;
+        _accountPhone = accountPhone;
         Title = "Мини-приложение MAX — " + caption;
         Width = 900;
         Height = 720;
@@ -33,7 +39,12 @@ public sealed class MiniAppWindow : Window
         MinHeight = 400;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel();
-        var bar = new DockPanel { Margin = new Thickness(8) };
+        var bar = new StackPanel { Margin = new Thickness(8) };
+        bar.Children.Add(new TextBlock
+        {
+            Text = "Аккаунт MAX: " + (string.IsNullOrWhiteSpace(_accountPhone) ? "не указан" : _accountPhone),
+            TextWrapping = TextWrapping.Wrap
+        });
         DockPanel.SetDock(bar, Dock.Top);
         // The server-signed URL authenticates the selected account.
         // Never offer to open it in a system browser or expose it in the UI.
@@ -80,13 +91,14 @@ public sealed class MiniAppWindow : Window
                     });
                 };
                 Object.defineProperty(window, 'WebViewHandler', {
-                    value: Object.freeze({postEvent(_eventName, _body) {}}),
+                    value: Object.freeze({postEvent: forward}),
                     writable: false, configurable: false
                 });
                 Object.defineProperty(window, 'PrivateWebViewHandler', {
                     value: Object.freeze({postEvent: forward}),
                     writable: false, configurable: false
                 });
+                window.chrome?.webview?.postMessage({kind: 'miniapp-bridge-ready'});
             })();
             """;
         // Insert only the URL origin: never expose the signed URL, query or
@@ -109,22 +121,35 @@ public sealed class MiniAppWindow : Window
             JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object ||
                 !root.TryGetProperty("kind", out JsonElement kind) ||
-                kind.GetString() != "mobile-id-no-cellular" ||
+                kind.ValueKind != JsonValueKind.String)
+                return;
+            if (kind.GetString() == "miniapp-bridge-ready")
+            {
+                _bridgeReady = true;
+                UpdateMiniAppStatus();
+                return;
+            }
+            if (kind.GetString() != "mobile-id-no-cellular" ||
                 !root.TryGetProperty("requestId", out JsonElement id) ||
                 id.ValueKind != JsonValueKind.String ||
                 !MaxMiniAppCellularUnavailable.TryCreateResponse(id.GetString(), out string response))
                 return;
+            _mobileIdRequestSeen = true;
+            UpdateMiniAppStatus();
 
-            // Only forward the explicit negative answer used by the original
-            // Android implementation; never construct successful Mobile ID data.
-            string js = "window.WebApp?.sendEvent?.(" +
+            // The original Android client returns this NEGATIVE response when
+            // it cannot access cellular transport. Do not synthesize a mobile
+            // carrier response or make any claims about trusted-device status.
+            string js = "(() => {" +
+                        "if (typeof window.WebApp?.sendEvent !== 'function') return false;" +
+                        "window.WebApp.sendEvent(" +
                         JsonSerializer.Serialize(MaxMiniAppCellularUnavailable.EventName) + "," +
-                        JsonSerializer.Serialize(response) + ");";
-            await _browser.CoreWebView2.ExecuteScriptAsync(js);
-            if (!_closed)
-                _status.Text = "Сотовая сеть Android на ПК отсутствует; передана штатная ошибка MAX. " +
-                               "Если сервер разрешает привязку через СМС для аккаунта с паролем, " +
-                               "этот вариант должен предложить сам MAX.";
+                        JsonSerializer.Serialize(response) + ");" +
+                        "return true;" +
+                        "})()";
+            string result = await _browser.CoreWebView2.ExecuteScriptAsync(js);
+            _mobileIdErrorDelivered = result == "true";
+            UpdateMiniAppStatus();
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or
             ArgumentException or System.Runtime.InteropServices.COMException or ObjectDisposedException)
@@ -132,6 +157,19 @@ public sealed class MiniAppWindow : Window
             // Malformed/untrusted messages must not crash an authenticated
             // mini-app, and must never be written to logs or shown verbatim.
         }
+    }
+
+    private void UpdateMiniAppStatus()
+    {
+        if (_closed) return;
+        string stage = _mobileIdErrorDelivered
+            ? "Запрос Mobile ID получен; отрицательный ответ no_cellular передан мини-приложению."
+            : _mobileIdRequestSeen
+                ? "Запрос Mobile ID получен; доставку ответа в мини-приложение подтвердить не удалось."
+                : _bridgeReady
+                    ? "Интерфейс MAX Bridge активен. Запрос Mobile ID пока не получен."
+                    : "Интерфейс MAX Bridge пока не подтвердил подключение.";
+        _status.Text = _navigationStatus + " " + stage;
     }
 
     private async void Browser_Loaded(object sender, RoutedEventArgs e)
@@ -176,12 +214,11 @@ public sealed class MiniAppWindow : Window
             _browser.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
             _browser.CoreWebView2.NavigationCompleted += (_, args) =>
             {
-                _status.Text = args.IsSuccess
+                _navigationStatus = args.IsSuccess
                     ? "Адрес выдан MAX. Платформа запуска в URL: " +
-                      MaxMiniAppLaunchEnvironment.PlatformDescription(_address) +
-                      ". Ограничения доверенного устройства определяет MAX."
-                    : "Ошибка загрузки страницы: " + args.WebErrorStatus +
-                      ". Для адресов MAX используется физическое подключение; проверьте доступность сайта.";
+                      MaxMiniAppLaunchEnvironment.PlatformDescription(_address) + "."
+                    : "Ошибка загрузки страницы: " + args.WebErrorStatus + ".";
+                UpdateMiniAppStatus();
             };
             _browser.CoreWebView2.Navigate(_address.AbsoluteUri);
         }
