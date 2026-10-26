@@ -8,6 +8,7 @@ public partial class LoginWindow : Window
 {
     private readonly IMaxAuthenticationTransport _transport;
     private bool _busy;
+    private CancellationTokenSource? _operationCancel;
 
     public LoginWindow(IMaxAuthenticationTransport transport)
     {
@@ -22,7 +23,7 @@ public partial class LoginWindow : Window
         StatusText.Text = "Подключение к MAX и запрос кода...";
         try
         {
-            var result = await _transport.BeginLoginAsync(PhoneBox.Text.Trim());
+            var result = await _transport.BeginLoginAsync(PhoneBox.Text.Trim(_operationCancel!.Token));
             ShowResult(result);
         }
         catch (Exception ex)
@@ -39,7 +40,7 @@ public partial class LoginWindow : Window
         StatusText.Text = "Проверка TCP, TLS и начального соединения без номера телефона...";
         try
         {
-            var result = await _transport.ProbeConnectionAsync();
+            var result = await _transport.ProbeConnectionAsync(_operationCancel!.Token);
             StatusText.Text = result.Error ?? "Проверка завершена.";
         }
         catch (Exception ex)
@@ -58,7 +59,7 @@ public partial class LoginWindow : Window
         {
             string code = CodeBox.Password;
             CodeBox.Clear();
-            ShowResult(await _transport.VerifyCodeAsync(code));
+            ShowResult(await _transport.VerifyCodeAsync(code, _operationCancel!.Token));
         }
         catch (Exception ex)
         {
@@ -76,7 +77,7 @@ public partial class LoginWindow : Window
         {
             string password = PasswordBox.Password;
             PasswordBox.Clear();
-            ShowResult(await _transport.VerifyPasswordAsync(password));
+            ShowResult(await _transport.VerifyPasswordAsync(password, _operationCancel!.Token));
         }
         catch (Exception ex)
         {
@@ -115,8 +116,28 @@ public partial class LoginWindow : Window
         StatusText.Text = result.Error ?? "Сервер не подтвердил авторизацию.";
     }
 
+    private void CancelOperation_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_busy) return;
+        _operationCancel?.Cancel();
+        CancelOperationButton.IsEnabled = false;
+        StatusText.Text = "Отмена подключения...";
+    }
+
     private void Busy(bool state)
     {
+        if (state)
+        {
+            _operationCancel?.Dispose();
+            _operationCancel = new CancellationTokenSource();
+        }
+        else
+        {
+            _operationCancel?.Dispose();
+            _operationCancel = null;
+        }
+        CancelOperationButton.Visibility = state ? Visibility.Visible : Visibility.Collapsed;
+        CancelOperationButton.IsEnabled = state;
         _busy = state;
         SendCodeButton.IsEnabled = !state;
         TestConnectionButton.IsEnabled = !state;
