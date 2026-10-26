@@ -305,10 +305,9 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
         _instanceId = instanceId;
         try
         {
-            // One resolved IP may have a broken route; try up to three endpoints
-            // with a five-second spacing. Every endpoint uses the same host SNI
-            // and full certificate validation. No authentication traffic is sent
-            // before a verified TLS connection is established.
+            // Prefer configured system proxy tunnels (HTTP CONNECT / SOCKS5)
+            // and then fall back to bounded direct connections. All paths
+            // enforce the real MAX hostname, SNI and certificate validation.
             await ConnectVerifiedTlsAsync(ct);
             var ssl = _ssl ?? throw new IOException("TLS-соединение не инициализировано.");
             _connectionCancel = new CancellationTokenSource();
@@ -437,10 +436,15 @@ public sealed class NativeMaxTransport : IMaxAuthenticationTransport
                     addresses.Add((hostname, ips[round]));
 
         if (addresses.Count == 0)
-            throw new IOException("Не удалось получить IP-адреса ни одного проверенного узла MAX.");
+        {
+            _endpointDiagnostics = systemProxyConfigured
+                ? "Системный прокси обнаружен, но туннель не установлен; " +
+                  string.Join("; ", proxyResults.Select(p => p.Key + "=" + p.Value))
+                : "Системный прокси не настроен.";
+            throw new IOException("Не удалось получить IP-адреса проверенных узлов MAX.");
+        }
 
         Exception? lastFailure = null;
-        _tlsAttemptCount = 0;
         foreach (var (hostname, address) in addresses)
         {
             if (_tlsAttemptCount > 0)
