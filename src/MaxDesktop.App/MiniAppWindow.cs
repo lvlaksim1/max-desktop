@@ -93,7 +93,9 @@ public sealed class MiniAppWindow : Window
             _browser.CoreWebView2.NavigationCompleted += (_, args) =>
             {
                 _status.Text = args.IsSuccess
-                    ? "Страница мини-приложения загружена по адресу, выданному сервером MAX."
+                    ? "Адрес выдан MAX. Платформа запуска в URL: " +
+                      MaxMiniAppLaunchEnvironment.PlatformDescription(_address) +
+                      ". Ограничения доверенного устройства определяет MAX."
                     : "Ошибка загрузки страницы: " + args.WebErrorStatus +
                       ". Для адресов MAX используется физическое подключение; проверьте доступность сайта.";
             };

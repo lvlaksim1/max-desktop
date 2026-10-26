@@ -285,6 +285,21 @@ Check(MaxMiniAppLaunchCodec.CreateWebRequest(100, 101, null) is not null,
       "valid request without start parameter");
 Console.WriteLine("BOT_WEB_APP(160): native/web, credential URL privacy, validation: PASS");
 
+
+Check(MaxMiniAppLaunchEnvironment.PlatformDescription(
+        new Uri("https://miniapp.example/#WebAppData=SIGNED_TEST&WebAppPlatform=web&WebAppVersion=26.1"))
+      == "web", "platform read from URL without decoding WebAppData");
+Check(MaxMiniAppLaunchEnvironment.PlatformDescription(
+        new Uri("https://miniapp.example/?WebAppPlatform=android#WebAppData=SECRET"))
+      == "android", "platform read from query");
+Check(MaxMiniAppLaunchEnvironment.PlatformDescription(
+        new Uri("https://miniapp.example/#WebAppData=SECRET"))
+      == "не указана", "missing platform is not invented");
+Check(MaxMiniAppLaunchEnvironment.PlatformDescription(
+        new Uri("https://miniapp.example/#WebAppPlatform=unknown&WebAppData=SECRET"))
+      == "не указана однозначно", "unknown platform is not interpreted as mobile");
+Console.WriteLine("Mini-app server-declared platform diagnostics: PASS");
+
 // Round-trip the field types actually needed by MAX's native handshake and SMS login.
 var map = new Dictionary<string, object?>
 {

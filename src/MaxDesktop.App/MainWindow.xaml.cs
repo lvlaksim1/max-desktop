@@ -346,6 +346,9 @@ public partial class MainWindow : Window
         AccountPhoneText.Text = connected
             ? _transport.CurrentPhone ?? "Сеанс подтверждён"
             : "Нет активного сеанса";
+        AccountProtocolText.Text = connected && _transport is HybridMaxTransport hybrid
+            ? "Протокол: " + hybrid.ActiveProtocolLabel
+            : "";
         AddAccountButton.Content = "+ Добавить аккаунт";
         RemoveAccountButton.Visibility = Visibility.Visible;
         RemoveAccountButton.IsEnabled = AccountList.SelectedItem is string && !_accountOperation;

@@ -35,6 +35,14 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
     public ConnectionState State => _active.State;
     public string? CurrentPhone => _active.CurrentPhone;
 
+    // Read-only protocol diagnostic; does not change authorization or device identity.
+    public string ActiveProtocolLabel =>
+        ReferenceEquals(_active, _tcpPhysical) ? "TCP / Android / физическая сеть" :
+        ReferenceEquals(_active, _tcp) ? "TCP / Android" :
+        ReferenceEquals(_active, _physical) ? "WebSocket / WEB / физическая сеть" :
+        ReferenceEquals(_active, _browser) ? "WebSocket / WEB / Edge" :
+        "WebSocket / WEB";
+
     private IMaxAuthenticationTransport SelectByPreference() => PreferredMode switch
     {
         MaxConnectionPreference.Tcp => _tcp,

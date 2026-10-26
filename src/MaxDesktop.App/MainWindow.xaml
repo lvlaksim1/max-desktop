@@ -47,6 +47,8 @@
       <StackPanel>
        <TextBlock x:Name="AccountStateText" Text="Не подключён" FontWeight="SemiBold" FontSize="12"/>
        <TextBlock x:Name="AccountPhoneText" Text="Нет активного сеанса" FontSize="10" Foreground="{DynamicResource MutedBrush}"/>
+       <TextBlock x:Name="AccountProtocolText" Text="" FontSize="10" Margin="0,4,0,0"
+                  TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}"/>
       </StackPanel>
      </Border>
     </StackPanel>
