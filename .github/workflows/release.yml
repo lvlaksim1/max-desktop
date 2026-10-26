@@ -1,5 +1,5 @@
 name: Publish MAX Desktop installers
-# v0.1.8: independent Chromium/WebView2 network stack, no QR; verifiable package resources.
+# v0.1.9: validated physical-interface WebSocket with VPN left enabled; no QR.
 
 on:
   push:
@@ -48,6 +48,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Protocol smoke checks failed' }
           dotnet run --project tests/MaxDesktop.WebSocket.Smoke/MaxDesktop.WebSocket.Smoke.csproj -c Release
           if ($LASTEXITCODE -ne 0) { throw 'WebSocket protocol smoke checks failed' }
+          dotnet run --project tests/MaxDesktop.WebSocket.Probe/MaxDesktop.WebSocket.Probe.csproj -c Release -- --physical --require-success
+          if ($LASTEXITCODE -ne 0) { throw 'Physical-interface WebSocket anonymous SESSION_INIT check failed' }
           dotnet run --project tests/MaxDesktop.Update.Smoke/MaxDesktop.Update.Smoke.csproj -c Release
           if ($LASTEXITCODE -ne 0) { throw 'Updater file locking checks failed' }
       - name: Publish self-contained Windows binaries
@@ -98,7 +100,7 @@ jobs:
           }
           $digest = (Get-FileHash $update -Algorithm SHA256).Hash.ToLowerInvariant()
           "$digest  MaxDesktop_Update_v$v.exe" | Set-Content -Encoding ASCII "$update.sha256"
-          gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes "MAX Desktop v0.1.8: добавлен независимый Chromium WebSocket через Microsoft Edge WebView2 без QR. Протокол входа по номеру, SMS, 2FA и токену сохранён, автоматический выбор теперь пробует Edge первым, затем .NET и TCP только до отправки SMS. Проверки Windows подтвердили успешный WebSocket+SESSION_INIT через Edge и имитацию полного цикла SMS→код→LOGIN без обращений к реальным аккаунтам; настоящая авторизация пользователя ещё не подтверждена. Диагностика .NET WebSocket включает вложенные категории ошибок. Установке необходим WebView2 Runtime, прежние сеансы и система обновлений сохраняются." --latest
+          gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes "MAX Desktop v0.1.9: добавлено нативное WebSocket-подключение через физический сетевой интерфейс без отключения или перенастройки системного VPN. При автоматическом выборе приложение сначала пробует этот маршрут, затем Edge, .NET и TCP, соблюдая запрет на повторный запрос SMS после неопределённого ответа. Проверены компиляция и анонимный SESSION_INIT через новый транспорт на Windows Runner; на компьютере владельца подтверждён WebSocket Upgrade 101 при включённом VPN. Реальная SMS-авторизация ещё требует пользовательской приёмки. QR не используется; старые сеансы и обновитель сохраняются."" --latest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publish failed' }
           $prior = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
           foreach ($item in $prior) {
