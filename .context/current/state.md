@@ -1,11 +1,12 @@
 # Состояние MAX Desktop — 26.10.2026
 
-- Репозиторий: https://github.com/lvlaksim1/max-desktop (`main`).
-- **Актуальный релиз v0.1.7**: https://github.com/lvlaksim1/max-desktop/releases/tag/v0.1.7. Проверены Setup, Update, SHA-256; предыдущие Releases удалены.
-- CI Windows [40253731349](https://github.com/lvlaksim1/max-desktop/actions/runs/40253731349) = success; Release workflow [40253731311](https://github.com/lvlaksim1/max-desktop/actions/runs/40253731311) = success.
-- В независимом [40253115470](https://github.com/lvlaksim1/max-desktop/actions/runs/40253115470) подтверждён WebSocket `wss://ws-api.oneme.ru/websocket` и успешный анонимный INIT v11 без номера, пароля или токенов.
-- Реализован WEB/WebSocket SMS → код → дополнительный пароль → LOGIN, хранение DPAPI с меткой транспорта; прежний TCP оставлен альтернативой. В диалоге выбираются автоматический, WebSocket, TCP. QR не используется по указанию пользователя.
-- Главный X сворачивает в трей, «−» сворачивает в панель задач, из меню трея можно завершить приложение, повторный запуск активирует имеющийся экземпляр. Для обновления реализовано явное завершение.
-- Ранее в пользовательской сети версии v0.1.5–v0.1.6 показывали TLS_HANDSHAKE/EOF до сертификата на всех трёх TCP-узлах, через прокси и напрямую.
-- **НЕТ пользовательской приёмки v0.1.7**. В частности, не доказаны SMS/2FA/LOGIN, получение чатов и фактический GUI-жизненный цикл.
-- Техническая спецификация: `docs/protocol/websocket-sms-2026-10-26.md`.
+- Репозиторий: https://github.com/lvlaksim1/max-desktop (main).
+- **Последний выпуск v0.1.8**: https://github.com/lvlaksim1/max-desktop/releases/tag/v0.1.8. Setup, Update, SHA-256 присутствуют; предыдущие выпуски удалены.
+- Windows CI: [40255959364](https://github.com/lvlaksim1/max-desktop/actions/runs/40255959364) success. Release workflow: [40255959472](https://github.com/lvlaksim1/max-desktop/actions/runs/40255959472) success, проверено наличие Resources/max-bridge.html в publish.
+- Независимая анонимная проверка Chromium WebSocket + INIT: [40255463057](https://github.com/lvlaksim1/max-desktop/actions/runs/40255463057) success. Функциональные офлайн-тесты имитируют SMS-код/LOGIN и отсутствие повторной отправки на неопределённом ответе.
+- В v0.1.8 реализован выбор «Автоматически (сначала Microsoft Edge)», «WebSocket через браузер Edge», «WebSocket через .NET», «TCP». Chromium WebView2 подключается через изолированную локальную страницу с CSP; прокси/сертификаты контролируются браузером. QR не используется.
+- Сохранено шифрованное хранилище DPAPI и все прежние типы сеансов; браузерный WEB_EDGE сохраняется отдельно.
+- Последние пользовательские скриншоты v0.1.7: TCP = TLS_HANDSHAKE/EOF до сертификата; WebSocket .NET = WS_CONNECT/WebSocketException. Проверка была без номера; причина сбоев на компьютере не установлена.
+- Интерфейс с X→трей, «−»→панель задач, меню «Выход» и одним экземпляром сохраняется в v0.1.8.
+- **Пользовательской приёмки v0.1.8 нет**: WebView2 в его сети, SMS, 2FA, LOGIN, переписка и поведение трея пока не подтверждены.
+- Спецификация: docs/protocol/chromium-websocket-2026-10-26.md.
