@@ -19,6 +19,11 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Check only WebSocket TLS and anonymous INIT
         run: dotnet run --project tests/MaxDesktop.WebSocket.Probe/MaxDesktop.WebSocket.Probe.csproj -c Release
+      - name: Check physical-interface WebSocket and anonymous SESSION_INIT
+        shell: pwsh
+        run: |
+          dotnet run --project tests/MaxDesktop.WebSocket.Probe/MaxDesktop.WebSocket.Probe.csproj -c Release -- --physical --require-success
+          if ($LASTEXITCODE -ne 0) { throw 'Physical-interface anonymous SESSION_INIT was not confirmed' }
       - name: Compare Windows Schannel HTTPS against the exact user endpoint
         shell: pwsh
         run: |

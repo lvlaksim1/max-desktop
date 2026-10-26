@@ -12,6 +12,10 @@ try
     var result = await transport.ProbeConnectionAsync(timeout.Token);
     Console.WriteLine("WS_PROBE_STATE=" + result.State);
     Console.WriteLine("WS_PROBE_DETAIL=" + (result.Error ?? "(none)"));
+    if (physical && args.Contains("--require-success", StringComparer.OrdinalIgnoreCase) &&
+        (result.State != ConnectionState.Disconnected ||
+         result.Error?.Contains("SESSION_INIT", StringComparison.Ordinal) != true))
+        return 1;
 }
 catch (Exception e)
 {
