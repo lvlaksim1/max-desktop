@@ -300,6 +300,28 @@ Check(MaxMiniAppLaunchEnvironment.PlatformDescription(
       == "не указана однозначно", "unknown platform is not interpreted as mobile");
 Console.WriteLine("Mini-app server-declared platform diagnostics: PASS");
 
+// Native Android Mobile ID normally reports this error when cellular network
+// is missing. Never invent an SMS endpoint, successful verification, or data.
+Check(MaxMiniAppCellularUnavailable.TryCreateResponse("test-id-1", out string noCellularJson),
+    "valid Mobile ID request id has explicit negative response");
+using (var failure = System.Text.Json.JsonDocument.Parse(noCellularJson))
+{
+    Check(failure.RootElement.GetProperty("requestId").GetString() == "test-id-1",
+        "Mobile ID error correlates with original request");
+    Check(failure.RootElement.GetProperty("error").GetProperty("code").GetString() ==
+          "client.verify_mobile_id.no_cellular",
+        "Android no-cellular error is emitted without pretending operator verification");
+}
+Check(!MaxMiniAppCellularUnavailable.TryCreateResponse("", out _),
+    "empty Mobile ID correlation id rejected");
+Check(!MaxMiniAppCellularUnavailable.TryCreateResponse(new string('a', 257), out _),
+    "oversized Mobile ID correlation id rejected");
+Check(!MaxMiniAppCellularUnavailable.TryCreateResponse("unsafe\\nline", out _),
+    "control characters rejected");
+Check(MaxMiniAppCellularUnavailable.TryCreateResponse("quote\\\"test", out string escapedJson) &&
+      escapedJson.Contains("\\\\""), "request id escaping preserves JSON safety");
+Console.WriteLine("MAX private Mobile ID bridge negative-response contract: PASS");
+
 // Round-trip the field types actually needed by MAX's native handshake and SMS login.
 var map = new Dictionary<string, object?>
 {
