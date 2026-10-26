@@ -1,10 +1,9 @@
 # Текущее состояние MAX Desktop — 26.10.2026
 
-- Репозиторий: `lvlaksim1/max-desktop` (public, main).
-- Последний релиз: [v0.1.4](https://github.com/lvlaksim1/max-desktop/releases/tag/v0.1.4), файлы `MaxDesktop_Setup_v0.1.4.exe`, `MaxDesktop_Update_v0.1.4.exe` и `.sha256`.
-- Windows CI: [40247220377](https://github.com/lvlaksim1/max-desktop/actions/runs/40247220377) success; release pipeline [40247380634](https://github.com/lvlaksim1/max-desktop/actions/runs/40247380634) success.
-- Ранее подтверждены корректность пользовательского интерфейса за исключением исправленных тем; авторизация MAX на рабочем сервере не принята.
-- Последнее сообщение пользователя: v0.1.3 показывает `Этап TLS_HANDSHAKE: соединение закрыто удалённым узлом (EOF)` при запросе кода.
-- GitHub Windows [40246937237](https://github.com/lvlaksim1/max-desktop/actions/runs/40246937237): `BundledMaxRoot` успешен и с системным TLS, и с явным TLS 1.2/1.3. Проблема пользователя **не воспроизведена** в этой среде.
-- Изменения v0.1.4: системный TLS, ограниченные альтернативные IP через DNS с паузой ≥5 с, обязательная проверка имени и сертификата MAX, окно входа с `Проверить соединение (без номера)`, более точная диагностика обрыва.
-- Интеграционный результат на компьютере владельца **не получен**. Серверные `AUTH_REQUEST/AUTH/LOGIN`, SMS и переписки остаются не подтверждены.
+- Публичный репозиторий `lvlaksim1/max-desktop`, основная ветка `main`.
+- Последний выпуск: [v0.1.5](https://github.com/lvlaksim1/max-desktop/releases/tag/v0.1.5), `MaxDesktop_Setup_v0.1.5.exe`, `MaxDesktop_Update_v0.1.5.exe`, `.sha256`.
+- Подтверждённая Windows-сборка: [40248715602](https://github.com/lvlaksim1/max-desktop/actions/runs/40248715602), success. Выпуск: [40248874326](https://github.com/lvlaksim1/max-desktop/actions/runs/40248874326), success.
+- Последний пользовательский снимок: v0.1.4, кнопка проверки без номера, все 3 соединения к `api2.oneme.ru` обрываются на TLS_HANDSHAKE до предъявления сертификата. Номер, пароль, код не передавались.
+- Проверены на GitHub Windows [40248116311](https://github.com/lvlaksim1/max-desktop/actions/runs/40248116311): `api2.oneme.ru`, `api.oneme.ru`, `api-tg.oneme.ru`; для каждого TLS 1.3 + анонимный SESSION_INIT (opcode 6, callsSeed).
+- С версии v0.1.5 предусмотрены разные узлы с проверенным TLS/SNI (до 6 попыток, пауза 5 с), обезличенная диагностика по узлам, кнопка отмены. Успех через эти узлы в пользовательской сети ещё не подтверждён.
+- Реальные AUTH_REQUEST/AUTH/LOGIN и переписки/сообщения не приняты; интерфейс и установка Windows работают, протокол экспериментален.
