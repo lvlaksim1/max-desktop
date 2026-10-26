@@ -3,6 +3,6 @@
   <Nullable>enable</Nullable>
   <ImplicitUsings>enable</ImplicitUsings>
   <EnableWindowsTargeting>true</EnableWindowsTargeting>
-  <Version>0.1.17</Version>
+  <Version>0.1.18</Version>
 </PropertyGroup>
 </Project>
