@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using MaxDesktop.Protocol;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
@@ -12,6 +13,9 @@ public sealed class MiniAppWindow : Window
 {
     private readonly Uri _address;
     private readonly WebView2 _browser = new();
+    private MiniAppNetworkProxy? _networkProxy;
+    private string? _profileDirectory;
+    private bool _closed;
     private readonly TextBlock _status = new()
     {
         Text = "Загрузка мини-приложения...",
@@ -31,7 +35,7 @@ public sealed class MiniAppWindow : Window
         var root = new DockPanel();
         var bar = new DockPanel { Margin = new Thickness(8) };
         DockPanel.SetDock(bar, Dock.Top);
-        var external = new System.Windows.Controls.Button { Content = "Открыть в браузере", Margin = new Thickness(6, 0, 0, 0) };
+        var external = new System.Windows.Controls.Button { Content = "Открыть в обычном браузере", Margin = new Thickness(6, 0, 0, 0) };
         DockPanel.SetDock(external, Dock.Right);
         external.Click += (_, _) => Process.Start(new ProcessStartInfo(_address.AbsoluteUri)
         {
@@ -43,22 +47,47 @@ public sealed class MiniAppWindow : Window
         root.Children.Add(_browser);
         Content = root;
         Loaded += Browser_Loaded;
-        Closed += (_, _) => _browser.Dispose();
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            _browser.Dispose();
+            _networkProxy?.Dispose();
+            _networkProxy = null;
+            if (_profileDirectory is not null)
+            {
+                // A WebView2 process can briefly retain handles after Dispose.
+                // A leftover empty InPrivate profile is not an authenticated MAX session.
+                try { Directory.Delete(_profileDirectory, recursive: true); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        };
     }
 
     private async void Browser_Loaded(object sender, RoutedEventArgs e)
     {
         try
         {
-            // Separate in-private WebView2 profile: do not share authorization
-            // cookies with the transport bridge or other MAX accounts.
-            string root = Path.Combine(
+            // Unlike MAX's authenticated socket, default WebView2 went through
+            // the blocked system VPN route, causing ERR_CONNECTION_CLOSED.
+            // This loopback-only proxy binds MAX hosts to the physical interface;
+            // other hosts use the configured system proxy / ordinary OS route.
+            _networkProxy = new MiniAppNetworkProxy();
+            _profileDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "MaxDesktop", "MiniAppWebView2");
-            var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: root);
+                "MaxDesktop", "MiniAppWebView2", Guid.NewGuid().ToString("N"));
+            var browserOptions = new CoreWebView2EnvironmentOptions
+            {
+                AdditionalBrowserArguments =
+                    $"--proxy-server=http://127.0.0.1:{_networkProxy.Port} --proxy-bypass-list=<-loopback>"
+            };
+            var environment = await CoreWebView2Environment.CreateAsync(
+                userDataFolder: _profileDirectory, options: browserOptions);
+            if (_closed) return;
             var options = environment.CreateCoreWebView2ControllerOptions();
             options.IsInPrivateModeEnabled = true;
             await _browser.EnsureCoreWebView2Async(environment, options);
+            if (_closed) return;
             if (_browser.CoreWebView2 is null) throw new InvalidOperationException("WebView2 не инициализирован.");
             var settings = _browser.CoreWebView2.Settings;
             settings.AreDevToolsEnabled = false;
@@ -70,15 +99,17 @@ public sealed class MiniAppWindow : Window
             _browser.CoreWebView2.NavigationCompleted += (_, args) =>
             {
                 _status.Text = args.IsSuccess
-                    ? "Страница загружена. Функции, требующие подтверждённые данные MAX, могут быть недоступны."
-                    : "Ошибка загрузки страницы: " + args.WebErrorStatus;
+                    ? "Страница загружена через отдельный сетевой маршрут. Авторизация мини-приложения MAX пока не подтверждена."
+                    : "Ошибка загрузки страницы: " + args.WebErrorStatus +
+                      ". Для адресов MAX используется физическое подключение; проверьте доступность сайта.";
             };
             _browser.CoreWebView2.Navigate(_address.AbsoluteUri);
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or
             UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
         {
-            _status.Text = "Не удалось открыть мини-приложение: " + ex.GetType().Name;
+            _status.Text = "Не удалось открыть мини-приложение: " + ex.GetType().Name +
+                ". Системный VPN и настройки Windows не изменены.";
         }
     }
 }
