@@ -1,5 +1,5 @@
 name: Publish MAX Desktop installers
-# v0.1.6: system proxy-aware native transport and user-copyable network diagnostics.
+# v0.1.7: QR-free WebSocket SMS plus tray behavior and single-instance activation.
 
 on:
   push:
@@ -96,7 +96,7 @@ jobs:
           }
           $digest = (Get-FileHash $update -Algorithm SHA256).Hash.ToLowerInvariant()
           "$digest  MaxDesktop_Update_v$v.exe" | Set-Content -Encoding ASCII "$update.sha256"
-          gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes "MAX Desktop v0.1.6: диагностирован повторный TLS_HANDSHAKE/EOF до сертификата на всех трёх проверенных узлах. Нативный TCP-клиент теперь учитывает системный HTTP/HTTPS CONNECT и SOCKS5-прокси; сохраняются проверка имени и цепочки TLS-сертификата MAX, прямое подключение в резерве. Добавлены локальные Windows-тесты туннелей и отказа прокси с кодом 407. Диагностика прокручивается и копируется, не содержит аккаунт, пароли или токены. Наличие прокси и доступность MAX на компьютере пользователя ещё не подтверждены." --latest
+          gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes "MAX Desktop v0.1.7: добавлен самостоятельный WEB/WebSocket JSON-протокол v11 для входа по телефону, SMS-коду, дополнительному паролю и сохранённому токену. QR НЕ используется. В окне входа выбирается автоматически (WebSocket первым), WebSocket либо TCP; прежние TCP-сеансы сохраняются. На Windows GitHub проверен успешный защищённый WebSocket и ответ SESSION_INIT без учётных данных. Реальный SMS-вход в сети владельца ещё не подтверждён. Крестик скрывает приложение в трей, сворачивание остаётся в панели задач, правый щелчок по трею содержит Выход; повторный запуск активирует существующий экземпляр. Исправлено завершение приложения агентом обновлений." --latest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publish failed' }
           $prior = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
           foreach ($item in $prior) {
