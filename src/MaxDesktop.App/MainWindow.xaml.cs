@@ -57,6 +57,15 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        if (System.Windows.Application.Current is App app && !app.IsExitRequested)
+        {
+            // X means minimize to the tray. The taskbar minimize control
+            // retains ordinary Windows minimization; don't hide on StateChanged.
+            e.Cancel = true;
+            Hide();
+            return;
+        }
+
         try
         {
             if (WindowState == WindowState.Normal)

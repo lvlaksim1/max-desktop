@@ -9,6 +9,7 @@ public partial class App : System.Windows.Application
     private EventWaitHandle? _activationSignal;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
     private volatile bool _exiting;
+    public bool IsExitRequested { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -40,32 +41,56 @@ public partial class App : System.Windows.Application
         MainWindow = window;
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Открыть MAX Desktop", null, (_, _) => Dispatcher.BeginInvoke(new Action(ShowMainWindow)));
-        menu.Items.Add("Выход", null, (_, _) => Dispatcher.BeginInvoke(new Action(() => MainWindow.Close())));
+        menu.Items.Add("Выход", null, (_, _) => Dispatcher.BeginInvoke(new Action(ExitApplication)));
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
             Text = "MAX Desktop",
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = LoadTrayIcon(),
             ContextMenuStrip = menu,
             Visible = true
         };
         _trayIcon.DoubleClick += (_, _) => Dispatcher.BeginInvoke(new Action(ShowMainWindow));
-        window.StateChanged += (_, _) =>
-        {
-            if (window.WindowState == WindowState.Minimized) window.Hide();
-        };
         window.Show();
+    }
+
+    private static System.Drawing.Icon LoadTrayIcon()
+    {
+        try
+        {
+            string? executable = Environment.ProcessPath;
+            if (executable is not null)
+                return System.Drawing.Icon.ExtractAssociatedIcon(executable) ?? System.Drawing.SystemIcons.Application;
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.IO.IOException or UnauthorizedAccessException)
+        {
+            // The generic icon is safe if the executable icon is unavailable.
+        }
+        return System.Drawing.SystemIcons.Application;
+    }
+
+    private void ExitApplication()
+    {
+        if (IsExitRequested) return;
+        IsExitRequested = true;
+        if (MainWindow is { } window) window.Close();
+        Shutdown();
     }
 
     private void ShowMainWindow()
     {
         if (MainWindow is null) return;
+        if (IsExitRequested) return;
         MainWindow.Show();
         MainWindow.WindowState = WindowState.Normal;
         MainWindow.Activate();
+        MainWindow.Topmost = true;
+        MainWindow.Topmost = false;
+        MainWindow.Focus();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        IsExitRequested = true;
         _exiting = true;
         _activationSignal?.Set();
         _activationSignal?.Dispose();
