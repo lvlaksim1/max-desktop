@@ -23,7 +23,7 @@ public partial class LoginWindow : Window
         StatusText.Text = "Подключение к MAX и запрос кода...";
         try
         {
-            var result = await _transport.BeginLoginAsync(PhoneBox.Text.Trim(_operationCancel!.Token));
+            var result = await _transport.BeginLoginAsync(PhoneBox.Text.Trim(), _operationCancel!.Token);
             ShowResult(result);
         }
         catch (Exception ex)
