@@ -1,0 +1,16 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)] [string]$GatewayRequestPath,
+    [Parameter(Mandatory = $true)] [string]$GatewayResultPath
+)
+
+$ErrorActionPreference = 'Stop'
+$request = Get-Content -LiteralPath $GatewayRequestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+$result = [ordered]@{
+    message = 'Replace this example with project-specific work.'
+    request_id = [string]$request.request_id
+}
+
+$result | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $GatewayResultPath -Encoding UTF8
+exit 0

@@ -1,0 +1,27 @@
+{
+  "schema": "pc-gateway-client",
+  "schema_version": 1,
+  "client_repository": "lvlaksim1/max-desktop",
+  "gateway_repository": "lvlaksim1/pc-runner-gateway",
+  "protocol": "pc-runner-gateway",
+  "protocol_version": "1.0.0",
+  "script_root": ".pc-gateway/tasks/",
+  "transport": {
+    "type": "github-issue-queue",
+    "issue_repository": "lvlaksim1/pc-runner-gateway",
+    "issue_title_prefix": "PC Gateway Request: ",
+    "token_env": "PC_GATEWAY_DISPATCH_TOKEN"
+  },
+  "result": {
+    "type": "gateway-issue-and-local-ledger"
+  },
+  "managed_files": [
+    "PC_GATEWAY_CLIENT.md",
+    ".pc-gateway/ENTRYPOINT.md",
+    ".pc-gateway/CONTRACT.md",
+    ".pc-gateway/client.json",
+    ".pc-gateway/Submit-PCGatewayRequest.ps1",
+    ".pc-gateway/tasks/README.md",
+    ".pc-gateway/tasks/Task-Template.ps1.example"
+  ]
+}
