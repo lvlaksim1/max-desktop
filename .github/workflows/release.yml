@@ -1,5 +1,5 @@
 name: Publish MAX Desktop installers
-# v0.1.13: opt-in native Android TCP over physical interface with active system VPN.
+# v0.1.14: safely close authentication dialog and display server no2fa reason.
 
 on:
   push:
@@ -124,7 +124,7 @@ jobs:
           }
           $digest = (Get-FileHash $update -Algorithm SHA256).Hash.ToLowerInvariant()
           "$digest  MaxDesktop_Update_v$v.exe" | Set-Content -Encoding ASCII "$update.sha256"
-          $notes = 'MAX Desktop v0.1.13: добавлен отдельный выбираемый вариант TCP Android через физический сетевой интерфейс без отключения или изменения системного VPN. Мобильный протокол MAX версии 10 реализует двоичные пакеты MessagePack/LZ4 и анонимный SESSION_INIT. В новом режиме TLS-сертификат проверяется, прокси Windows не перенастраивается. Существующий автоматический WebSocket-режим и VK Captcha сохранены, переход после отправки SMS запрещён, новый мобильный режим выбирается только вручную. Подтверждены Windows-сборка, защищённое TLS соединение с мобильными узлами на ПК владельца и реальный анонимный SESSION_INIT на Windows Runner. Выдача SMS и успешный LOGIN в мобильном режиме на реальном аккаунте пока не проверены.'
+          $notes = 'MAX Desktop v0.1.14: исправлено аварийное завершение приложения при нажатии «Закрыть» или крестика в окне подключения аккаунта. Убрано повторное закрытие модального окна из асинхронного обработчика; очистка незавершённого сеанса выполняется после закрытия, при этом главный экран остаётся открытым. Добавлено Windows STA-испытание закрытия окна на стадии выбора подключения, с ожидающим SMS и кнопкой X. Серверный отказ error.profile.active.session.no2fa теперь поясняется как ограничение нового входа при активной сессии без установленного пароля 2FA. Авторизация мобильного и WEB-протоколов этим выпуском не разблокируется: оба способа получили серверный отказ. Системный VPN и транспорт MAX не изменяются; пользовательские данные сохраняются.'
           gh release create $tag $full $update "$update.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "MAX Desktop v$v" --notes $notes --latest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publish failed' }
           $prior = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
