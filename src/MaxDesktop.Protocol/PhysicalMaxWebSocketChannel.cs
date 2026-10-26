@@ -40,7 +40,7 @@ public sealed class PhysicalMaxWebSocketChannel : IMaxWebSocketChannel
 
             string description = network.Description + " " + network.Name;
             if (new[] { "TUN", "TAP", "Wintun", "WireGuard", "VPN", "Xray",
-                        "sing-box", "Clash", "Hyper-V", "VirtualBox", "VMware" }
+                        "sing-box", "Clash" }
                 .Any(token => description.Contains(token, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
