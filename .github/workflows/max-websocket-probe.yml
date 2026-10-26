@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'tests/MaxDesktop.WebSocket.Probe/**'
+      - 'src/MaxDesktop.Protocol/PhysicalMaxWebSocketChannel.cs'
+      - 'src/MaxDesktop.Protocol/HybridMaxTransport.cs'
       - '.github/workflows/max-websocket-probe.yml'
   workflow_dispatch:
 permissions:
