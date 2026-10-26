@@ -16,6 +16,8 @@ public partial class MainWindow : Window
     private readonly IMaxAuthenticationTransport _transport;
     private readonly ObservableCollection<ChatSummary> _chats = new();
     private readonly ObservableCollection<ChatMessage> _messages = new();
+    private CancellationTokenSource? _chatRefreshCancellation;
+    private int _chatRefreshGeneration;
 
     public MainWindow()
     {
@@ -81,6 +83,7 @@ public partial class MainWindow : Window
             _settings.LeftPaneWidth = AccountColumn.ActualWidth;
             _settings.ChatPaneWidth = ChatColumn.ActualWidth;
             SettingsStore.Save(_settings);
+            _chatRefreshCancellation?.Cancel();
             _transport.Dispose();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -127,11 +130,58 @@ public partial class MainWindow : Window
         AddAccountButton.Content = connected ? "Сменить аккаунт" : "+ Добавить аккаунт";
         RemoveAccountButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
         ConversationHint.Text = connected
-            ? "Вход подтверждён; загрузка чатов ещё не реализована"
+            ? "Выберите чат из списка"
             : "Выберите чат после подключения аккаунта";
+        _chatRefreshCancellation?.Cancel();
+        _chats.Clear();
+        _messages.Clear();
+        RefreshChatsButton.IsEnabled = connected;
         StatusLabel.Text = connected
-            ? "Авторизация MAX подтверждена. Подключение чатов будет добавлено отдельно."
+            ? "Авторизация MAX подтверждена. Загружаю чаты..."
             : result.Error ?? "Аккаунт MAX не подключён.";
+        if (connected) _ = RefreshChatsAsync();
+    }
+
+    private async void RefreshChats_Click(object sender, RoutedEventArgs e)
+    {
+        await RefreshChatsAsync();
+    }
+
+    private async Task RefreshChatsAsync()
+    {
+        _chatRefreshCancellation?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        _chatRefreshCancellation = cancellation;
+        int generation = ++_chatRefreshGeneration;
+        RefreshChatsButton.IsEnabled = false;
+        StatusLabel.Text = "Загрузка чатов MAX...";
+        try
+        {
+            var items = await _transport.GetChatsAsync(cancellation.Token);
+            if (generation != _chatRefreshGeneration || cancellation.IsCancellationRequested)
+                return;
+            _chats.Clear();
+            foreach (var chat in items) _chats.Add(chat);
+            StatusLabel.Text = items.Count == 0
+                ? "MAX вернул пустой список чатов."
+                : $"Загружено чатов: {items.Count}.";
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or
+            InvalidOperationException or TimeoutException or OperationCanceledException)
+        {
+            if (generation == _chatRefreshGeneration)
+                StatusLabel.Text = "Ошибка загрузки чатов: " + ex.Message;
+        }
+        finally
+        {
+            if (generation == _chatRefreshGeneration)
+            {
+                RefreshChatsButton.IsEnabled = _transport.State == ConnectionState.Connected;
+                _chatRefreshCancellation = null;
+            }
+            cancellation.Dispose();
+        }
     }
 
     private void ChatSearch_TextChanged(object sender, TextChangedEventArgs e)
@@ -155,10 +205,9 @@ public partial class MainWindow : Window
         }
         ConversationTitle.Text = chat.Title;
         _messages.Clear();
-        var items = await _transport.GetMessagesAsync(chat.Id);
-        foreach (var message in items) _messages.Add(message);
-        MessageList.Visibility = Visibility.Visible;
-        EmptyConversation.Visibility = Visibility.Collapsed;
+        ConversationHint.Text = "История сообщений — следующий этап разработки.";
+        MessageList.Visibility = Visibility.Collapsed;
+        EmptyConversation.Visibility = Visibility.Visible;
     }
 
     private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
