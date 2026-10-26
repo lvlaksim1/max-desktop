@@ -224,6 +224,67 @@ using (var client = new System.Net.Sockets.TcpClient())
 }
 Console.WriteLine("Mini-app HTTPS CONNECT policy / local refusal: PASS");
 
+// BOT_WEB_APP (160) is an authenticated request for the server-signed URL.
+Check(MaxMiniAppLaunchCodec.Opcode == 160, "mini-app opcode 160");
+var appRequest = MaxMiniAppLaunchCodec.CreateNativeRequest(234377933, 20010005001, "order_42");
+Check(appRequest.Count == 3 && Equals(appRequest["botId"], 234377933L) &&
+      Equals(appRequest["chatId"], 20010005001L) &&
+      Equals(appRequest["startParam"], "order_42"), "mini-app native request fields");
+var withoutStart = MaxMiniAppLaunchCodec.CreateNativeRequest(10, -321, null);
+Check(withoutStart.Count == 2 && !withoutStart.ContainsKey("startParam"),
+      "do not invent a start parameter");
+using (var webAppRequest = System.Text.Json.JsonDocument.Parse(
+    System.Text.Json.JsonSerializer.Serialize(
+        MaxMiniAppLaunchCodec.CreateWebRequest(234377933, 20010005001, "order_42"))))
+{
+    var element = webAppRequest.RootElement;
+    Check(element.GetProperty("botId").GetInt64() == 234377933 &&
+          element.GetProperty("chatId").GetInt64() == 20010005001 &&
+          element.GetProperty("startParam").GetString() == "order_42",
+          "WebSocket app request matches physical transport");
+}
+const string signedMiniAppUrl = "https://miniapp.example.org/#tgWebAppData=SIGNED_TEST_SECRET&tgWebAppVersion=1";
+var nativeUrl = MaxMiniAppLaunchCodec.DecodeNative(
+    new Dictionary<string, object?> { ["url"] = signedMiniAppUrl });
+using (var appResponse = System.Text.Json.JsonDocument.Parse(
+    System.Text.Json.JsonSerializer.Serialize(new { url = signedMiniAppUrl })))
+{
+    Uri webUrl = MaxMiniAppLaunchCodec.DecodeWeb(appResponse.RootElement);
+    Check(nativeUrl.AbsoluteUri == signedMiniAppUrl && webUrl == nativeUrl,
+        "native and web preserve server-signed URL and fragment");
+}
+foreach (string badAddress in new[]
+{
+    "https://localhost:443/#token", "https://192.168.0.1/#signed",
+    "http://miniapp.example.org/", "file:///etc/passwd",
+    "javascript:alert(1)", "https://user:pass@miniapp.example.org/",
+    "https://miniapp.example.org:8443/"
+})
+{
+    bool rejected = false;
+    try { MaxMiniAppLaunchCodec.DecodeNative(
+        new Dictionary<string, object?> { ["url"] = badAddress }); }
+    catch (InvalidDataException ex)
+    {
+        rejected = true;
+        Check(!ex.Message.Contains("signed", StringComparison.OrdinalIgnoreCase) &&
+              !ex.Message.Contains("pass", StringComparison.OrdinalIgnoreCase),
+              "signed URL is never repeated in errors");
+    }
+    Check(rejected, "reject unsafe mini-app URL");
+}
+bool unknownUrlRejected = false;
+try { MaxMiniAppLaunchCodec.DecodeNative(new Dictionary<string, object?>()); }
+catch (InvalidDataException) { unknownUrlRejected = true; }
+Check(unknownUrlRejected, "do not fall back to a public bot profile without signed URL");
+bool malformedStartRejected = false;
+try { MaxMiniAppLaunchCodec.CreateNativeRequest(1, 2, "secret?invalid"); }
+catch (ArgumentException) { malformedStartRejected = true; }
+Check(malformedStartRejected, "reject unsupported mini-app start payload");
+Check(MaxMiniAppLaunchCodec.CreateWebRequest(100, 101, null) is not null,
+      "valid request without start parameter");
+Console.WriteLine("BOT_WEB_APP(160): native/web, credential URL privacy, validation: PASS");
+
 // Round-trip the field types actually needed by MAX's native handshake and SMS login.
 var map = new Dictionary<string, object?>
 {
