@@ -161,8 +161,8 @@ $extended = (';github={0}/{1};mail={2}/{3};microsoft={4}/{5};pxws={6}/{7}/{8};px
   $proxyWeb.route, $proxyWeb.exit_code, $proxyWeb.http_status,
   $proxyGithub.route, $proxyGithub.exit_code, $proxyGithub.http_status,
   $proxyMail.route, $proxyMail.exit_code, $proxyMail.http_status)
-$result.status = $result.status + $extended
-$result.controls = [ordered]@{ github = $controlGithub; mail = $controlMail; microsoft = $controlMicrosoft }
-$result.explicit_proxy = [ordered]@{ ws = $proxyWs; web = $proxyWeb; github = $proxyGithub; mail = $proxyMail }
+$result['status'] = $result['status'] + $extended
+$result['controls'] = [ordered]@{ github = $controlGithub; mail = $controlMail; microsoft = $controlMicrosoft }
+$result['explicit_proxy'] = [ordered]@{ ws = $proxyWs; web = $proxyWeb; github = $proxyGithub; mail = $proxyMail }
 $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $GatewayResultPath -Encoding UTF8
 exit 0
