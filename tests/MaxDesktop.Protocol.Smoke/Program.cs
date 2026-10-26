@@ -316,7 +316,7 @@ Check(!MaxMiniAppCellularUnavailable.TryCreateResponse("", out _),
     "empty Mobile ID correlation id rejected");
 Check(!MaxMiniAppCellularUnavailable.TryCreateResponse(new string('a', 257), out _),
     "oversized Mobile ID correlation id rejected");
-Check(!MaxMiniAppCellularUnavailable.TryCreateResponse("unsafe\\nline", out _),
+Check(!MaxMiniAppCellularUnavailable.TryCreateResponse("unsafe" + (char)10 + "line", out _),
     "control characters rejected");
 Check(MaxMiniAppCellularUnavailable.TryCreateResponse("test-id-2", out string escapedJson) &&
       System.Text.Json.JsonDocument.Parse(escapedJson).RootElement
