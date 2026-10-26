@@ -1,9 +1,9 @@
-# Текущее состояние MAX Desktop — 26.10.2026
+# Состояние MAX Desktop на 26.10.2026
 
-- Публичный репозиторий `lvlaksim1/max-desktop`, основная ветка `main`.
-- Последний выпуск: [v0.1.5](https://github.com/lvlaksim1/max-desktop/releases/tag/v0.1.5), `MaxDesktop_Setup_v0.1.5.exe`, `MaxDesktop_Update_v0.1.5.exe`, `.sha256`.
-- Подтверждённая Windows-сборка: [40248715602](https://github.com/lvlaksim1/max-desktop/actions/runs/40248715602), success. Выпуск: [40248874326](https://github.com/lvlaksim1/max-desktop/actions/runs/40248874326), success.
-- Последний пользовательский снимок: v0.1.4, кнопка проверки без номера, все 3 соединения к `api2.oneme.ru` обрываются на TLS_HANDSHAKE до предъявления сертификата. Номер, пароль, код не передавались.
-- Проверены на GitHub Windows [40248116311](https://github.com/lvlaksim1/max-desktop/actions/runs/40248116311): `api2.oneme.ru`, `api.oneme.ru`, `api-tg.oneme.ru`; для каждого TLS 1.3 + анонимный SESSION_INIT (opcode 6, callsSeed).
-- С версии v0.1.5 предусмотрены разные узлы с проверенным TLS/SNI (до 6 попыток, пауза 5 с), обезличенная диагностика по узлам, кнопка отмены. Успех через эти узлы в пользовательской сети ещё не подтверждён.
-- Реальные AUTH_REQUEST/AUTH/LOGIN и переписки/сообщения не приняты; интерфейс и установка Windows работают, протокол экспериментален.
+- Репозиторий: `lvlaksim1/max-desktop`, public, main.
+- **Последний релиз: v0.1.6** — https://github.com/lvlaksim1/max-desktop/releases/tag/v0.1.6; файлы Setup, Update и SHA-256 проверены.
+- Windows CI: [40250385964](https://github.com/lvlaksim1/max-desktop/actions/runs/40250385964) success; выпуск [40250537938](https://github.com/lvlaksim1/max-desktop/actions/runs/40250537938) success.
+- Последняя пользовательская диагностика: v0.1.5; все шесть прямых попыток `api2.oneme.ru`, `api.oneme.ru`, `api-tg.oneme.ru` обрываются на TLS_HANDSHAKE/EOF до серверного сертификата. Номер телефона при проверке не передавался.
+- Из Windows GitHub ранее подтверждены TLS и анонимный SESSION_INIT ко всем трём узлам (40248116311). Из пользовательской сети исходное подключение не работает.
+- В v0.1.6: системный HTTP/HTTPS CONNECT/SOCKS5 туннель, сохранена строгая проверка сертификата MAX; прямое подключение — резерв; прокручиваемая и копируемая диагностика; локальные тесты обоих типов туннелей и отказа прокси 407 пройдены.
+- Подключение из сети пользователя через прокси ещё **не проверено**. Авторизация, SMS-код, чаты и отправка сообщений не подтверждены.
