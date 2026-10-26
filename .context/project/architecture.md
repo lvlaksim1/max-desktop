@@ -1,14 +1,11 @@
-# Архитектура MAX Desktop
+# Архитектура MAX Desktop — фактическое состояние v0.1.8 (26.10.2026)
 
-Базовый документ: docs/architecture-baseline.md. Текущий технический этап — опытная авторизация v0.1.1.
+Базовое проектирование: `docs/architecture-baseline.md`; подробности авторизации: `docs/protocol/authorization-26.35.1.md`, `docs/protocol/websocket-sms-2026-10-26.md`, `docs/protocol/chromium-websocket-2026-10-26.md`, `docs/protocol/network-root-cause-2026-10-26.md`.
 
-- src/MaxDesktop.App: нативные WPF-окна, настройки, темы, однократный экземпляр, значок области уведомлений, обновление. LoginWindow запрашивает номер, код и дополнительный пароль; ProtectedMaxSessionStore шифрует сеанс DPAPI.
-- src/MaxDesktop.Protocol: отдельный от WPF протокол (IMaxTransport, IMaxAuthenticationTransport), TCP/TLS с системной проверкой сертификата, MessagePack, LZ4, 10-байтовое кадрирование, отпечаток APK 26.35.1, SESSION_INIT, AUTH_REQUEST, AUTH, LOGIN. UnavailableMaxTransport сохранён только как явно отказывающая тестовая заглушка; главное окно использует NativeMaxTransport.
-- src/MaxDesktop.UpdateAgent: проверка и установка обновлений вне процесса программы.
-- installer/full.iss, installer/update.iss: первая установка и обновление.
-- tests/MaxDesktop.Protocol.Smoke: автономные проверки MessagePack, фреймов, LZ4, отпечатка, ошибочных входных данных.
-- .github/workflows/ci.yml: Windows компиляция и тесты.
-- .github/workflows/release.yml: публикация Setup, Update, SHA-256, очистка старых выпусков.
-
-Каталог установки: %LOCALAPPDATA%\Programs\MaxDesktop; изменяемые данные: %LOCALAPPDATA%\MaxDesktop.
-Реальная успешная авторизация MAX, чаты и сообщения ещё не подтверждены. Сетевой протокол и его границы: docs/protocol/authorization-26.35.1.md.
+- `src/MaxDesktop.App`: WPF-окна, темы и настройки, `LoginWindow`, `MainWindow`, трей, однократный экземпляр через Mutex и сигнал активации, восстановление существующего окна, закрытие X→трей / «−»→панель задач. `ProtectedMaxSessionStore` использует DPAPI для сохранения токенов и идентификаторов.
+- `src/MaxDesktop.Protocol`: опытный бинарный TCP/TLS-транспорт (пакеты MessagePack, LZ4, отпечаток Android APK 26.35.1, TLS-проверка) и WEB JSON v11 (`MaxWebSocketCodec`, `NativeMaxWebSocketTransport`, `HybridMaxTransport`). В WEB используются команды INIT, запрос SMS, код, 2FA, LOGIN. QR не реализован.
+- `DotNetMaxWebSocketChannel`: WEB-протокол по системному .NET WebSocket. `EdgeMaxWebSocketChannel`: тот же WEB-протокол через изолированную локальную страницу WebView2/Chromium. Переключение только до возможной отправки SMS, не дублировать коды.
+- `src/MaxDesktop.UpdateAgent`: отдельный процесс обновления, явное завершение приложения, сохранение пользовательских данных.
+- `installer/full.iss`, `installer/update.iss`: установка и обновление для текущего пользователя в `%LOCALAPPDATA%\Programs\MaxDesktop`. Настройки/данные в `%LOCALAPPDATA%\MaxDesktop`.
+- `tests/` и `.github/workflows/`: Windows CI, проверка кадрирования TCP, WEB JSON, имитация SMS, отдельная анонимная проверка доступности WebSocket, проверки обновителя. GitHub Release хранит только последний Setup/Update/SHA-256.
+- **Ограничения фактической приёмки:** TLS/WS не работает с машины пользователя даже в обычном браузере и `curl.exe`; реальная отправка SMS и LOGIN не приняты, чаты и сообщения не интегрированы. CI из других сетей не доказывает работоспособность.
