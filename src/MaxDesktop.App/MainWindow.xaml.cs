@@ -240,7 +240,7 @@ public partial class MainWindow : Window
     private async void RemoveAccount_Click(object sender, RoutedEventArgs e)
     {
         if (_accountOperation || AccountList.SelectedItem is not string phone) return;
-        if (MessageBox.Show(this,
+        if (System.Windows.MessageBox.Show(this,
             "Удалить выбранный аккаунт с этого компьютера? Другие аккаунты останутся сохранёнными.",
             "Удаление аккаунта MAX", MessageBoxButton.YesNo, MessageBoxImage.Question)
             != MessageBoxResult.Yes) return;
