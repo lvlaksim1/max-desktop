@@ -1,0 +1,21 @@
+name: Diagnose MAX alternative protocol endpoints
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/MaxDesktop.EndpointProbe/**'
+      - '.github/workflows/max-endpoint-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  endpoints:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Test TLS and anonymous session init per endpoint
+        run: dotnet run --project tests/MaxDesktop.EndpointProbe/MaxDesktop.EndpointProbe.csproj -c Release
