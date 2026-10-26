@@ -46,6 +46,9 @@ using (var hybrid = new HybridMaxTransport(store))
     hybrid.PreferredMode = MaxConnectionPreference.Tcp;
     var badTcp = await hybrid.BeginLoginAsync("not a phone");
     Check(badTcp.State == ConnectionState.Failed, "old TCP mode preserved");
+    hybrid.PreferredMode = MaxConnectionPreference.PhysicalWebSocket;
+    var badPhysical = await hybrid.BeginLoginAsync("not a phone");
+    Check(badPhysical.State == ConnectionState.Failed, "physical mode rejects bad number offline");
     hybrid.PreferredMode = MaxConnectionPreference.Automatic;
 }
 var legacy = new MaxSavedSession("test", "dummy-token", "id", "instance");
@@ -78,12 +81,13 @@ using (var simulated = new HybridMaxTransport(simulatedStore, new DeterministicC
 // Critically, never retry the SMS request automatically after a transport
 // failure on opcode 17: the server could have queued the SMS already.
 var smsFailure = new DeterministicChannel { RejectSmsResponse = true };
-using (var hybrid = new HybridMaxTransport(new CapturingStore(), smsFailure))
+using (var hybrid = new HybridMaxTransport(new CapturingStore(), new DeterministicChannel(), smsFailure))
 {
     hybrid.PreferredMode = MaxConnectionPreference.Automatic;
     var result = await hybrid.BeginLoginAsync(dummyPhone);
     Check(result.State == ConnectionState.Failed, "uncertain SMS request fails without fallback");
     Check(smsFailure.SmsCount == 1, "no duplicate SMS on uncertain failure");
+    Check(hybrid.State == ConnectionState.Failed, "physical mode SMS failure stays on same transport");
 }
 Console.WriteLine("Browser/managed WEB channel separation, SMS and login state, no-duplicate-code rule: PASS");
 

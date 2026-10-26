@@ -1,6 +1,11 @@
 using MaxDesktop.Protocol;
-using var transport = new NativeMaxWebSocketTransport(new EmptyStore());
-Console.WriteLine("Anonymous MAX WEB diagnostic; no phone, SMS, QR, password or token.");
+bool physical = args.Any(arg => arg.Equals("--physical", StringComparison.OrdinalIgnoreCase));
+using var transport = physical
+    ? new NativeMaxWebSocketTransport(new EmptyStore(), new PhysicalMaxWebSocketChannel(), "WEB_PHYSICAL")
+    : new NativeMaxWebSocketTransport(new EmptyStore());
+Console.WriteLine(physical
+    ? "Anonymous MAX WEB physical-interface diagnostic; no phone, SMS, QR, password or token."
+    : "Anonymous MAX WEB diagnostic; no phone, SMS, QR, password or token.");
 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 try
 {

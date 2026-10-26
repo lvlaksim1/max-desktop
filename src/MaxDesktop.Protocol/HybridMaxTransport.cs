@@ -1,6 +1,6 @@
 namespace MaxDesktop.Protocol;
 
-public enum MaxConnectionPreference { Automatic, BrowserWebSocket, WebSocket, Tcp }
+public enum MaxConnectionPreference { Automatic, BrowserWebSocket, WebSocket, Tcp, PhysicalWebSocket }
 
 /// <summary>
 /// Selects Chromium WebSocket (when available), .NET WebSocket or legacy TCP
@@ -11,18 +11,22 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
 {
     private readonly IMaxSessionStore _sessionStore;
     private readonly NativeMaxWebSocketTransport _web;
+    private readonly NativeMaxWebSocketTransport _physical;
     private readonly NativeMaxWebSocketTransport? _browser;
     private readonly NativeMaxTransport _tcp;
     private IMaxAuthenticationTransport _active;
 
-    public HybridMaxTransport(IMaxSessionStore store, IMaxWebSocketChannel? browserChannel = null)
+    public HybridMaxTransport(IMaxSessionStore store, IMaxWebSocketChannel? browserChannel = null,
+        IMaxWebSocketChannel? physicalChannel = null)
     {
         _sessionStore = store ?? throw new ArgumentNullException(nameof(store));
         _web = new NativeMaxWebSocketTransport(store);
+        _physical = new NativeMaxWebSocketTransport(store,
+            physicalChannel ?? new PhysicalMaxWebSocketChannel(), "WEB_PHYSICAL");
         _browser = browserChannel is null ? null
             : new NativeMaxWebSocketTransport(store, browserChannel, "WEB_EDGE");
         _tcp = new NativeMaxTransport(store);
-        _active = _browser ?? _web;
+        _active = _physical;
     }
 
     public MaxConnectionPreference PreferredMode { get; set; } = MaxConnectionPreference.Automatic;
@@ -32,9 +36,10 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
     private IMaxAuthenticationTransport SelectByPreference() => PreferredMode switch
     {
         MaxConnectionPreference.Tcp => _tcp,
+        MaxConnectionPreference.PhysicalWebSocket => _physical,
         MaxConnectionPreference.WebSocket => _web,
         MaxConnectionPreference.BrowserWebSocket => _browser ?? _web,
-        _ => _browser ?? _web
+        _ => _physical
     };
 
     public async Task<AuthResult> ProbeConnectionAsync(CancellationToken cancellationToken = default)
@@ -43,8 +48,8 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
         var result = await _active.ProbeConnectionAsync(cancellationToken);
         if (PreferredMode == MaxConnectionPreference.Automatic)
         {
-            string label = ReferenceEquals(_active, _browser)
-                ? "WebSocket Microsoft Edge" : "WebSocket .NET";
+            string label = ReferenceEquals(_active, _physical) ? "WebSocket через физический интерфейс" :
+                ReferenceEquals(_active, _browser) ? "WebSocket Microsoft Edge" : "WebSocket .NET";
             return result with { Error = label + ": " + (result.Error ?? "Проверка завершена.") };
         }
         return result;
@@ -59,34 +64,39 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
         string phoneNumber, CancellationToken cancellationToken = default)
     {
         _active = SelectByPreference();
-        AuthResult result = await _active.BeginLoginAsync(phoneNumber, cancellationToken);
-        if (PreferredMode != MaxConnectionPreference.Automatic || !FailedBeforeSms(result))
-            return result;
+        if (PreferredMode != MaxConnectionPreference.Automatic)
+            return await _active.BeginLoginAsync(phoneNumber, cancellationToken);
 
-        // Do not issue a new SMS request after WS_AUTH_REQUEST, even if the
-        // socket was closed and the server's result is unknown.
-        var failures = new List<string>
+        // Only retry across transports if failure occurred before AUTH_REQUEST;
+        // never risk issuing a duplicate SMS after an uncertain server response.
+        var candidates = new List<(string Name, IMaxAuthenticationTransport Transport)>
         {
-            (ReferenceEquals(_active, _browser) ? "Edge: " : ".NET: ") + result.Error
+            ("Физический интерфейс", _physical)
         };
-        if (_browser is not null)
-        {
-            _active = _web;
-            result = await _web.BeginLoginAsync(phoneNumber, cancellationToken);
-            if (!FailedBeforeSms(result))
-            {
-                if (result.State == ConnectionState.Failed)
-                    return result with { Error = string.Join("\n", failures) + "\n.NET: " + result.Error };
-                return result;
-            }
-            failures.Add(".NET: " + result.Error);
-        }
+        if (_browser is not null) candidates.Add(("Edge", _browser));
+        candidates.Add((".NET", _web));
+        candidates.Add(("TCP", _tcp));
 
-        _active = _tcp;
-        result = await _tcp.BeginLoginAsync(phoneNumber, cancellationToken);
-        if (result.State == ConnectionState.Failed)
-            return result with { Error = string.Join("\n", failures) + "\nTCP: " + result.Error };
-        return result;
+        var failures = new List<string>();
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            var candidate = candidates[i];
+            _active = candidate.Transport;
+            AuthResult result = await _active.BeginLoginAsync(phoneNumber, cancellationToken);
+            bool last = i == candidates.Count - 1;
+            if (result.State != ConnectionState.Failed)
+                return result;
+
+            string diagnostic = candidate.Name + ": " + result.Error;
+            if (!FailedBeforeSms(result) || last)
+            {
+                if (failures.Count == 0) return result;
+                failures.Add(diagnostic);
+                return result with { Error = string.Join("\n", failures) };
+            }
+            failures.Add(diagnostic);
+        }
+        throw new InvalidOperationException("Нет доступного транспорта MAX.");
     }
 
     public Task<AuthResult> VerifyCodeAsync(string verificationCode, CancellationToken cancellationToken = default) =>
@@ -104,6 +114,7 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
         {
             "WEB_EDGE" when _browser is not null => _browser,
             "WEB" => _web,
+            "WEB_PHYSICAL" => _physical,
             _ => _tcp
         };
         return await _active.RestoreSessionAsync(cancellationToken);
@@ -121,6 +132,7 @@ public sealed class HybridMaxTransport : IMaxAuthenticationTransport
     public void Dispose()
     {
         _browser?.Dispose();
+        _physical.Dispose();
         _web.Dispose();
         _tcp.Dispose();
     }
