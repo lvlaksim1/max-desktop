@@ -25,32 +25,36 @@ try{
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
+using System.Collections.Generic;
 public static class MaxWindowPresence {
   public delegate bool Visitor(IntPtr hwnd, IntPtr ignored);
   [DllImport("user32.dll")] public static extern bool EnumWindows(Visitor callback, IntPtr ignored);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
-  [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hwnd, StringBuilder buffer, int max);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hwnd, StringBuilder buffer, int max);
   [DllImport("user32.dll")] public static extern int GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+  public static int[] Count(uint[] pids) {
+    var accepted = new HashSet<uint>(pids);
+    int visible=0, mini=0;
+    Visitor visitor=(hwnd,ignored) => {
+      uint pid;
+      GetWindowThreadProcessId(hwnd, out pid);
+      if (accepted.Contains(pid) && IsWindowVisible(hwnd)) {
+        visible++;
+        var title=new StringBuilder(256);
+        GetWindowText(hwnd, title, title.Capacity);
+        if (title.ToString().StartsWith("Мини-приложение MAX",StringComparison.Ordinal)) mini++;
+      }
+      return true;
+    };
+    EnumWindows(visitor,IntPtr.Zero);
+    return new int[] { visible, mini };
+  }
 }
 '@ -ErrorAction Stop
   $ids=@($processes | ForEach-Object { [uint32]$_.Id })
-  $seen=0
-  $mini=0
-  [MaxWindowPresence]::EnumWindows({
-    param($hwnd,$ignored)
-    [uint32]$pid=0
-    [void][MaxWindowPresence]::GetWindowThreadProcessId($hwnd,[ref]$pid)
-    if(($ids -contains $pid) -and [MaxWindowPresence]::IsWindowVisible($hwnd)){
-      $seen++
-      $builder=New-Object System.Text.StringBuilder 256
-      [void][MaxWindowPresence]::GetWindowText($hwnd,$builder,256)
-      # Only compare a stable product-owned window prefix, never emit titles.
-      if($builder.ToString().StartsWith('Мини-приложение MAX',[StringComparison]::Ordinal)){
-        $mini++
-      }
-    }
-    return $true
-  },[IntPtr]::Zero) | Out-Null
+  $counts=[MaxWindowPresence]::Count([uint32[]]$ids)
+  $seen=[int]$counts[0]
+  $mini=[int]$counts[1]
   $result.visible_window_count=$seen
   $result.miniapp_window_count=$mini
   $result.status='window_presence:visible='+$seen+';miniapp='+$mini+';same_session='+$result.same_session
