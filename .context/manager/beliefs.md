@@ -185,3 +185,9 @@
 - [Владелец, вывод команд] `adb devices` показывает авторизованное физическое Android устройство со статусом `device`, Android 15, оригинальное приложение `ru.oneme.app`, установлен MAX 26.36.2 versionCode 6879. Исследованные Java-исходники ранее были MAX 26.35.1 versionCode 6867.
 - [Указание владельца] Для следующей работы **предположить эквивалентность нужного механизма Mobile ID между 26.35.1 и 26.36.2**, пока нет опровергающих сведений. Эквивалентность не проверялась сравнением APK.
 - [Реализация в GitHub] Добавлена read-only проверка Windows/Android USB без PowerShell: `scripts/android-usb-preflight.cmd` и документ docs/protocol/android-usb-readonly-preflight-2026-10-27.md. Проверяет ADB-состояние, установленный MAX, признаки мобильной сети, синтетический ADB round-trip; не читает коды, токены, экран, операторский HTTP. **На физическом устройстве ещё не запущена.**
+
+
+## 27.10.2026 — на физическом Android подтверждён сотовый Internet/Validated через PC Gateway
+- [Два удалённых вызова, прямой вывод PC Gateway] Проверка ADB `dumpsys connectivity` через разрешённый Windows PC Gateway выполнена на физическом Android; окончательный запрос [#491](https://github.com/lvlaksim1/pc-runner-gateway/issues/491) закрылся SUCCESS. Данные из сетевых агентов: 3 записи NetworkAgentInfo, 3 CELLULAR, 2 CELLULAR+INTERNET, 2 CELLULAR+INTERNET+VALIDATED. Число агентов не равно числу SIM.
+- [Доказанная предпосылка] У Android есть сотовая сеть с INTERNET; соответствует сетевым требованиям APK для WebAppVerifyMobileId: addTransportType(0).addCapability(12).build(). Проверка **не вызывала** Mobile ID и не подтверждала операторский запрос или доверие Windows.
+- [Проверяемость] Код `.pc-gateway/tasks/Inspect-AndroidCellularNetwork.ps1` на SHA ddf59ece0fe5b84c9fabf4db0a7b025dedf6cc5c и отчёт docs/protocol/android-cellular-connectivity-verified-2026-10-27.md. Отчёт содержит только числовые агрегаты, без сетевых адресов, кодов или токенов.
