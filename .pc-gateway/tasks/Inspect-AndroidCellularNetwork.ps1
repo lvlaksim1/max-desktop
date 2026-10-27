@@ -113,7 +113,13 @@ try {
                     }
                 }
                 $result.parsing = if ($parsed -gt 0) { 'parsed_agent_capabilities' } else { 'unrecognized_android_format' }
-                $result.status = if ($parsed -gt 0) { 'observations_collected' } else { 'inconclusive_network_format' }
+                $result.status = if ($parsed -gt 0) {
+                    'network_observation: agents=' + $agents.Count +
+                    ';parsed=' + $parsed +
+                    ';cellular=' + $result.cellular_agent_count +
+                    ';cellular_internet=' + $result.cellular_internet_agent_count +
+                    ';cellular_internet_validated=' + $result.cellular_internet_validated_agent_count
+                } else { 'inconclusive_network_format: agent_blocks=' + $agents.Count }
                 $result['parsed_agent_count'] = $parsed
                 # Discard unredacted system text: never write it to output/logs.
                 $dump = $null
