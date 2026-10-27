@@ -28,7 +28,7 @@ try {
    if($ver -match '^[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?$'){$r.app_version=$ver}
   }catch{}
  }
- $r.status='runtime_presence_checked'
+ $r.status=('runtime: app='+$r.app_process_count+';same_session='+$r.app_same_session_count+';webview2='+$r.webview2_process_count+';version='+$r.app_version)
 }
 catch { $r.status='runtime_presence_inconclusive' }
 $r | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $GatewayResultPath -Encoding UTF8
