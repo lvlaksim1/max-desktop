@@ -17,7 +17,8 @@ public sealed class MiniAppWindow : Window
     private string? _profileDirectory;
     private bool _closed;
     private readonly string? _accountPhone;
-    private bool _bridgeReady;
+    private bool _bridgeScriptLoaded;
+    private int _frameCreatedCount;
     private bool _mobileIdRequestSeen;
     private bool _mobileIdErrorDelivered;
     private string _navigationStatus = "Загрузка мини-приложения...";
@@ -125,7 +126,7 @@ public sealed class MiniAppWindow : Window
                 return;
             if (kind.GetString() == "miniapp-bridge-ready")
             {
-                _bridgeReady = true;
+                _bridgeScriptLoaded = true;
                 UpdateMiniAppStatus();
                 return;
             }
@@ -163,13 +164,14 @@ public sealed class MiniAppWindow : Window
     {
         if (_closed) return;
         string stage = _mobileIdErrorDelivered
-            ? "Запрос Mobile ID получен; отрицательный ответ no_cellular передан мини-приложению."
+            ? "Запрос Mobile ID получен; функция приёма no_cellular вызвана (решение сервера неизвестно)."
             : _mobileIdRequestSeen
                 ? "Запрос Mobile ID получен; доставку ответа в мини-приложение подтвердить не удалось."
-                : _bridgeReady
-                    ? "Интерфейс MAX Bridge активен. Запрос Mobile ID пока не получен."
-                    : "Интерфейс MAX Bridge пока не подтвердил подключение.";
-        _status.Text = _navigationStatus + " " + stage;
+                : _bridgeScriptLoaded
+                    ? "Наш сценарий интерфейса внедрён; вызов Mobile ID со стороны MAX не наблюдался."
+                    : "Внедрение нашего сценария интерфейса пока не подтверждено.";
+        _status.Text = _navigationStatus + " " + stage +
+                       " Созданных вложенных кадров: " + _frameCreatedCount + ".";
     }
 
     private async void Browser_Loaded(object sender, RoutedEventArgs e)
@@ -209,6 +211,13 @@ public sealed class MiniAppWindow : Window
             await _browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(bridgeScript);
             _browser.CoreWebView2.WebMessageReceived += async (_, args) =>
                 await HandleMobileIdBridgeMessageAsync(args, signedOrigin);
+            // Only count created frames; never inspect their URLs, HTML, tokens or content.
+            _browser.CoreWebView2.FrameCreated += (_, _) =>
+            {
+                if (_closed) return;
+                _frameCreatedCount++;
+                UpdateMiniAppStatus();
+            };
             _browser.CoreWebView2.PermissionRequested += (_, args) =>
                 args.State = CoreWebView2PermissionState.Deny;
             _browser.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
