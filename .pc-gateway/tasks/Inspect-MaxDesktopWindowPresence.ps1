@@ -58,6 +58,6 @@ public static class MaxWindowPresence {
  else {
   $result.status='no_desktop_app_process'
  }
-}catch{ $result.status='window_check_failed' }
+}catch{ $result.status='window_check_failed_'+$_.Exception.GetType().Name }
 $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $GatewayResultPath -Encoding UTF8
 exit 0
