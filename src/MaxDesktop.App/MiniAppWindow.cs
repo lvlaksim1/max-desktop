@@ -19,6 +19,8 @@ public sealed class MiniAppWindow : Window
     private readonly string? _accountPhone;
     private bool _bridgeScriptLoaded;
     private int _frameCreatedCount;
+    private int _sameOriginFrameBridgeReadyCount;
+    private int _sameOriginFrameMobileIdRequestCount;
     private bool _mobileIdRequestSeen;
     private bool _mobileIdErrorDelivered;
     private string _navigationStatus = "Загрузка мини-приложения...";
@@ -81,7 +83,8 @@ public sealed class MiniAppWindow : Window
         const string script = """
             (() => {
                 'use strict';
-                if (window !== window.top || location.origin !== SIGNED_ORIGIN) return;
+                if (location.origin !== SIGNED_ORIGIN) return;
+                const isTop = window === window.top;
                 const forward = (eventName, body) => {
                     if (eventName !== 'WebAppVerifyMobileId' || typeof body !== 'string' || body.length > 16384) return;
                     let payload;
@@ -99,7 +102,7 @@ public sealed class MiniAppWindow : Window
                     value: Object.freeze({postEvent: forward}),
                     writable: false, configurable: false
                 });
-                window.chrome?.webview?.postMessage({kind: 'miniapp-bridge-ready'});
+                window.chrome?.webview?.postMessage({kind: isTop ? 'miniapp-bridge-ready' : 'miniapp-frame-ready'});
             })();
             """;
         // Insert only the URL origin: never expose the signed URL, query or
@@ -109,7 +112,8 @@ public sealed class MiniAppWindow : Window
     }
 
     private async Task HandleMobileIdBridgeMessageAsync(
-        CoreWebView2WebMessageReceivedEventArgs args, string signedOrigin)
+        CoreWebView2WebMessageReceivedEventArgs args, string signedOrigin,
+        CoreWebView2Frame? sourceFrame = null)
     {
         if (_closed || _browser.CoreWebView2 is null) return;
         try
@@ -124,9 +128,15 @@ public sealed class MiniAppWindow : Window
                 !root.TryGetProperty("kind", out JsonElement kind) ||
                 kind.ValueKind != JsonValueKind.String)
                 return;
-            if (kind.GetString() == "miniapp-bridge-ready")
+            if (kind.GetString() == "miniapp-bridge-ready" && sourceFrame is null)
             {
                 _bridgeScriptLoaded = true;
+                UpdateMiniAppStatus();
+                return;
+            }
+            if (kind.GetString() == "miniapp-frame-ready" && sourceFrame is not null)
+            {
+                _sameOriginFrameBridgeReadyCount++;
                 UpdateMiniAppStatus();
                 return;
             }
@@ -136,6 +146,7 @@ public sealed class MiniAppWindow : Window
                 !MaxMiniAppCellularUnavailable.TryCreateResponse(id.GetString(), out string response))
                 return;
             _mobileIdRequestSeen = true;
+            if (sourceFrame is not null) _sameOriginFrameMobileIdRequestCount++;
             UpdateMiniAppStatus();
 
             // The original Android client returns this NEGATIVE response when
@@ -148,7 +159,12 @@ public sealed class MiniAppWindow : Window
                         JsonSerializer.Serialize(response) + ");" +
                         "return true;" +
                         "})()";
-            string result = await _browser.CoreWebView2.ExecuteScriptAsync(js);
+            // Responses must return to the document that initiated the request.
+            // CoreWebView2 executes ONLY in the top-level document; frame-specific
+            // calls must use the source CoreWebView2Frame instead.
+            string result = sourceFrame is null
+                ? await _browser.CoreWebView2.ExecuteScriptAsync(js)
+                : await sourceFrame.ExecuteScriptAsync(js);
             _mobileIdErrorDelivered = result == "true";
             UpdateMiniAppStatus();
         }
@@ -171,7 +187,9 @@ public sealed class MiniAppWindow : Window
                     ? "Наш сценарий интерфейса внедрён; вызов Mobile ID со стороны MAX не наблюдался."
                     : "Внедрение нашего сценария интерфейса пока не подтверждено.";
         _status.Text = _navigationStatus + " " + stage +
-                       " Созданных вложенных кадров: " + _frameCreatedCount + ".";
+                       " Созданных вложенных кадров: " + _frameCreatedCount +
+                       ". Сценарий внедрён в кадры нашего происхождения: " + _sameOriginFrameBridgeReadyCount +
+                       ". Запросов Mobile ID из них: " + _sameOriginFrameMobileIdRequestCount + ".";
     }
 
     private async void Browser_Loaded(object sender, RoutedEventArgs e)
@@ -211,11 +229,15 @@ public sealed class MiniAppWindow : Window
             await _browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(bridgeScript);
             _browser.CoreWebView2.WebMessageReceived += async (_, args) =>
                 await HandleMobileIdBridgeMessageAsync(args, signedOrigin);
-            // Only count created frames; never inspect their URLs, HTML, tokens or content.
-            _browser.CoreWebView2.FrameCreated += (_, _) =>
+            // The top-level WebMessageReceived does not receive iframe messages.
+            // Subscribe separately to each frame without exposing its URL,
+            // page body, signed WebAppData or HTTP payloads.
+            _browser.CoreWebView2.FrameCreated += (_, frameArgs) =>
             {
                 if (_closed) return;
                 _frameCreatedCount++;
+                frameArgs.Frame.WebMessageReceived += async (_, frameMessage) =>
+                    await HandleMobileIdBridgeMessageAsync(frameMessage, signedOrigin, frameArgs.Frame);
                 UpdateMiniAppStatus();
             };
             _browser.CoreWebView2.PermissionRequested += (_, args) =>
