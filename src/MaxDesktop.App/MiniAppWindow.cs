@@ -21,6 +21,7 @@ public sealed class MiniAppWindow : Window
     private int _frameCreatedCount;
     private int _sameOriginFrameBridgeReadyCount;
     private int _sameOriginFrameMobileIdRequestCount;
+    private bool? _topLevelOriginMatchesSigned;
     private bool _mobileIdRequestSeen;
     private bool _mobileIdErrorDelivered;
     private string _navigationStatus = "Загрузка мини-приложения...";
@@ -186,10 +187,29 @@ public sealed class MiniAppWindow : Window
                 : _bridgeScriptLoaded
                     ? "Наш сценарий интерфейса внедрён; вызов Mobile ID со стороны MAX не наблюдался."
                     : "Внедрение нашего сценария интерфейса пока не подтверждено.";
-        _status.Text = _navigationStatus + " " + stage +
+        string originState = _topLevelOriginMatchesSigned switch
+        {
+            true => "Происхождение основной страницы совпадает.",
+            false => "Происхождение основной страницы отличается от адреса запуска.",
+            _ => "Происхождение основной страницы пока неизвестно."
+        };
+        _status.Text = _navigationStatus + " " + originState + " " + stage +
                        " Созданных вложенных кадров: " + _frameCreatedCount +
-                       ". Сценарий внедрён в кадры нашего происхождения: " + _sameOriginFrameBridgeReadyCount +
+                       ". Срабатываний сценария в кадрах нашего происхождения: " + _sameOriginFrameBridgeReadyCount +
                        ". Запросов Mobile ID из них: " + _sameOriginFrameMobileIdRequestCount + ".";
+    }
+
+    private void RegisterFrame(CoreWebView2Frame frame, string signedOrigin)
+    {
+        if (_closed) return;
+        _frameCreatedCount++;
+        // Frame.WebMessageReceived is separate from the main WebView2 event.
+        // Also register nested descendants, whose FrameCreated events belong
+        // to the direct parent frame. Never inspect URLs, HTML or page content.
+        frame.WebMessageReceived += async (_, message) =>
+            await HandleMobileIdBridgeMessageAsync(message, signedOrigin, frame);
+        frame.FrameCreated += (_, child) => RegisterFrame(child.Frame, signedOrigin);
+        UpdateMiniAppStatus();
     }
 
     private async void Browser_Loaded(object sender, RoutedEventArgs e)
@@ -229,22 +249,20 @@ public sealed class MiniAppWindow : Window
             await _browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(bridgeScript);
             _browser.CoreWebView2.WebMessageReceived += async (_, args) =>
                 await HandleMobileIdBridgeMessageAsync(args, signedOrigin);
-            // The top-level WebMessageReceived does not receive iframe messages.
-            // Subscribe separately to each frame without exposing its URL,
-            // page body, signed WebAppData or HTTP payloads.
+            // Listen for the root frame and recursively registered descendants.
             _browser.CoreWebView2.FrameCreated += (_, frameArgs) =>
-            {
-                if (_closed) return;
-                _frameCreatedCount++;
-                frameArgs.Frame.WebMessageReceived += async (_, frameMessage) =>
-                    await HandleMobileIdBridgeMessageAsync(frameMessage, signedOrigin, frameArgs.Frame);
-                UpdateMiniAppStatus();
-            };
+                RegisterFrame(frameArgs.Frame, signedOrigin);
             _browser.CoreWebView2.PermissionRequested += (_, args) =>
                 args.State = CoreWebView2PermissionState.Deny;
             _browser.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
             _browser.CoreWebView2.NavigationCompleted += (_, args) =>
             {
+                // Compare origins only in memory. Never emit or log the signed
+                // URL, redirected URL, query string or fragment.
+                _topLevelOriginMatchesSigned =
+                    Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out Uri? currentPage) &&
+                    currentPage.GetLeftPart(UriPartial.Authority).Equals(
+                        signedOrigin, StringComparison.OrdinalIgnoreCase);
                 _navigationStatus = args.IsSuccess
                     ? "Адрес выдан MAX. Платформа запуска в URL: " +
                       MaxMiniAppLaunchEnvironment.PlatformDescription(_address) + "."
