@@ -32,6 +32,8 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'CAPTCHA callback verification failed' }
           }
           finally { Pop-Location }
+      - name: Verify mini-app JS bridge behavior in isolated synthetic documents
+        run: node --test tests/MaxDesktop.MiniAppBridge.Smoke/bridge.test.cjs
       - name: Build WPF app
         run: dotnet build src/MaxDesktop.App/MaxDesktop.App.csproj -c Release
       - name: Build update agent
