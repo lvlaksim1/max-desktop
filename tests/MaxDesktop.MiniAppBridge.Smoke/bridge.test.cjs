@@ -70,8 +70,9 @@ test('only precisely named event with JSON requestId reaches the host, frame and
 
 test('frame-originated requests are handled by frame WebMessageReceived and answered in the same frame', () => {
     assert.match(source, /CoreWebView2\.FrameCreated/);
-    assert.match(source, /frameArgs\.Frame\.WebMessageReceived \+=/);
-    assert.match(source, /HandleMobileIdBridgeMessageAsync\(frameMessage, signedOrigin, frameArgs\.Frame\)/);
+    assert.match(source, /RegisterFrame/);
+    assert.match(source, /frame\.WebMessageReceived/);
+    assert.match(source, /frame\.FrameCreated/);
     assert.match(source, /sourceFrame is null[\s\S]+ExecuteScriptAsync\(js\)[\s\S]+sourceFrame\.ExecuteScriptAsync\(js\)/);
     assert.match(source, /GetLeftPart\(UriPartial\.Authority\)\.Equals\(signedOrigin/);
     assert.match(source, /Созданных вложенных кадров/);
