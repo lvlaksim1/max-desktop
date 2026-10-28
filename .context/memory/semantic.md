@@ -1,26 +1,69 @@
 # MAX Desktop — семантическая память
 
 - [Владелец] Нужен самостоятельный Windows MAX Desktop на WPF/.NET 8 с принципом установки и обновления как MailRu Desktop; никаких QR-кодов при авторизации, только телефон/SMS и необходимые дополнительные проверки.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Владелец] X главного окна→трей, «−»→панель задач, правое меню трея→«Выход», один экземпляр с восстановлением при повторном запуске. Реализовано в коде, локальная приёмка отдельных сценариев не завершена.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Исходники] TCP/TLS и WEB JSON v11 WebSocket по номеру через .NET и Edge Chromium WebView2. DPAPI для токенов, безопасная смена транспорта только до возможного SMS, не дублировать SMS.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [GitHub Actions] GitHub Windows успешно компилировал приложение и получал анонимный INIT через TCP/WebSocket/Chromium; это тесты **из другой сети**, не свидетельство пользовательского подключения. Последний релиз v0.1.8, Setup/Update/SHA-256.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Владелец, экран клиента] На Windows пользователя v0.1.8 все соединения TCP, .NET WS, WebView2 прерываются до AUTH_REQUEST. TCP EOF до сертификата; .NET WS TLS/EOF; Edge WS_CONNECT без открытия.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Владелец, независимые снимки] Обычный Яндекс Браузер неожиданно прерывает подключение к ws-api.oneme.ru, а `curl.exe -I --max-time 15 https://ws-api.oneme.ru/websocket` на том же ПК возвращает **curl (35) / Schannel TLS handshake failed**. Сбой воспроизводится вне MAX Desktop, конкретный виновник не доказан.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Методический вывод] Не переносить успешные тесты CI из другой сети на пользовательскую и не добавлять новые транспорта без проверки доступности на самом устройстве. Следующий опыт — тот же ПК через независимую мобильную/другую сеть, затем только обоснованная коррекция.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Технический отчёт] `docs/protocol/network-root-cause-2026-10-26.md`. Следующей версии v0.1.9 пока нет.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Владелец, 26.10.2026] Системный VPN остаётся включённым и неизменным, MAX может использовать любой прикладной маршрут включая физический сетевой интерфейс.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [PC Gateway #399/#400/#402] Локальный физический IPv4 при работающем VPN дал HTTPS и WebSocket 101, .NET-совместимый отбор сетевого адаптера подтверждён.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [GitHub 40322276206 и 40323017999] Новый C# канал выполнил анонимный SESSION_INIT в Windows Actions, выпущена v0.1.9; локальная пользовательская авторизация не принята.
 
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [26.10.2026] После устранения TLS в v0.1.9 появился отдельный отказ при запросе SMS: «WS_AUTH_REQUEST: Проверка не пройдена, попробуйте ещё раз». По внешним данным это типичная проверка человека VK ID, но оригинальный error code этого ответа не сохранён.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Код v0.1.10] CAPTCHA_REQUEST(224) {source:"auth",identifier:phone} может вернуть link id.vk.ru/not_robot_captcha; после самостоятельного решения пользователем captchaToken передаётся в START_AUTH(17). Новая ручная ветка реализована, офлайн проверена, реальная приёмка ожидается.
+  - authority: legacy-unverified
 - [PC Gateway #403] id.vk.ru доступен при включённом VPN (302), id.vk.com (301). Системные настройки VPN не изменялись.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Гарантия] Проверенная сеть на ПК: PhysicalWebSocket с подтверждённым пользователем SESSION_INIT; реальный SMS и captcha-success ещё открыты. Последний выпуск v0.1.10.
 
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Владелец, 26.10.2026] Первый реальный аккаунт с отсутствующим «Паролем для входа» сервер не разрешает подключить на втором устройстве; на уже авторизованном Android установка пароля ограничена **сутками**. Второй аккаунт с ранее установленным паролем **успешно авторизован в MAX Desktop** после SMS+дополнительного пароля, статус «MAX подключён» на пользовательском скриншоте v0.1.13.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [Код] Подтверждённый LOGIN выполняет SaveAuthenticatedLoginAsync, DPAPI запись и State.Connected. Реальное восстановление сеанса после перезапуска пока не проверено. Методы GetChatsAsync/GetMessagesAsync ещё заглушки, так что пустой чат-лист не является ошибкой авторизации.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [GitHub] v0.1.14 опубликована, CI/выпуск успешны. Она чинит закрытие дочернего окна авторизации; пользовательская проверка закрытия на v0.1.14 ожидается.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [GitHub, 26.10.2026] GET_CHATS opcode 53 повторно опубликован после первоначальной блокировки записи: NativeMaxTransport TCP v10, NativeMaxWebSocketTransport v11, MaxChatListCodec, WPF список и кнопка обновления. CI 40355993730 и выпуск v0.1.15 Actions 40356562263 успешны. Реальную пользовательскую загрузку ещё требуется проверить. Секреты и личные чаты в GitHub не публиковались.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [26.10.2026] v0.1.16 опубликована после успешных GitHub Windows CI 40361654111/40362232472 и релиза 40362232465. Реализовано GET_HISTORY opcode 49 для TCP/MessagePack v10 и WebSocket/JSON v11, 30 сообщений и старая история с пагинацией, сортировка, дедупликация, отмена при смене чата. Никаких операций пометки прочтения; отправка отключена. Реальная история на ПК владельца ещё не принята. Пользователь ранее подтвердил восстановление сеанса/чатов/обновления в v0.1.15.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [26.10.2026, реальное приложение] История v0.1.16 работает для обычной переписки; авария при открытии «Чат 0» вызвана необработанным ArgumentOutOfRangeException у GET_HISTORY chatId=0. Исправлено в v0.1.17 через CanOpenChat и пояснение; тест PASS.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - [GitHub 26.10.2026] v0.1.17 добавляет DPAPI ProtectedMaxAccountVault, перенос старого одиночного сеанса и отдельные слоты для нескольких аккаунтов, выбор/добавление/локальное удаление. CI #40366483307, release #40367266811 success. Реальная приёмка второго аккаунта пока не проведена. Отправка сообщений по прямой просьбе владельца пока не нужна.
+  - source: legacy-v2-state
+  - authority: legacy-unverified

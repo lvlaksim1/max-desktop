@@ -1,21 +1,21 @@
 {
   "schema": "context-capsule",
-  "version": "2.0.0-dev",
+  "version": "2.1.0",
   "source": "lvlaksim1/context-capsule-project-manager",
   "context_capsule_version": "1.3.1",
-  "project_manager_version": "2.0.0-dev",
+  "project_manager_version": "2.1.0",
   "context_capsule": {
     "version": "1.3.1",
     "repository": "lvlaksim1/context-capsule",
     "commit": "2ef41a5ed57ae514cc5980065560d7e55d5e4b9a"
   },
   "project_manager": {
-    "version": "2.0.0-dev",
+    "version": "2.1.0",
     "repository": "lvlaksim1/context-capsule-project-manager",
-    "commit": "2912687b38e23dcd0b017f336c321a3ae7f39674"
+    "commit": "6c8160365198206409747c145fd1dabaaf91f4e7"
   },
-  "core_commit": "2912687b38e23dcd0b017f336c321a3ae7f39674",
-  "project_manager_commit": "2912687b38e23dcd0b017f336c321a3ae7f39674",
+  "core_commit": "6c8160365198206409747c145fd1dabaaf91f4e7",
+  "project_manager_commit": "6c8160365198206409747c145fd1dabaaf91f4e7",
   "context_capsule_commit": "2ef41a5ed57ae514cc5980065560d7e55d5e4b9a",
   "provenance": {
     "context_capsule": {
@@ -24,7 +24,7 @@
     },
     "project_manager": {
       "repository": "lvlaksim1/context-capsule-project-manager",
-      "commit": "2912687b38e23dcd0b017f336c321a3ae7f39674"
+      "commit": "6c8160365198206409747c145fd1dabaaf91f4e7"
     }
   },
   "installed_at": "2026-10-25",

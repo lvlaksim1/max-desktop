@@ -1,22 +1,58 @@
 # MAX Desktop — процедурная память
 
 - Темы WPF и Windows Forms: текст в системных ComboBox может быть нечитаем в тёмном оформлении; проверять обычное и раскрытое состояния, наследуемый цвет и оформление элементов списка.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Стадии проверки независимы: успешная компиляция ≠ правильные пакеты ≠ подтверждённая анонимная инициализация ≠ настоящая авторизация аккаунта.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Версию отпечатка Android APK 26.35.1 и метаданные протокола сохранять согласованными; не смешивать значения разных версий.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - При диагностике использовать обезличенные этапы, категории ошибки и время; не публиковать номера, пароли, SMS-коды, сеансы, Cookie или токены.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - При сетевых ошибках **сначала проверить доступность того же сервера вне приложения на том же пользовательском компьютере**; не обобщать удачные GitHub Windows CI из другого сетевого окружения.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Для TLS-сбоя: браузер и `curl.exe -I --max-time 15 https://ws-api.oneme.ru/websocket` позволяют отличить ошибку только приложения от независимой. HTTP 400/403/426 достаточно для вывода о работоспособном HTTPS (но не авторизации).
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - После подтверждённого локального TLS-отказа менять один фактор за раз: тот же ПК через другой интернет-канал; при успехе исследовать исходный маршрут/прокси/фильтрацию, при повторном отказе — общие для двух сетей компоненты Windows и доступность сервера. Не заявлять конкретного виновника без доказательств.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Не выпускать новый установщик только ради очередного варианта транспорта без установленной проблемы и обоснованного изменения. QR исключён.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Выпуск: Windows CI → GitHub Release vX.Y.Z → проверить Setup/Update/SHA-256 и единственность бинарного выпуска.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Изменения связанных файлов менеджера — единый Git-коммит с новой generation и контрольными суммами git-blob-sha1; новое поколение должно пройти обратную проверку.
 
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Для проверок **на конкретном ПК владельца** использовать `pc-runner-gateway` и `.pc-gateway/ENTRYPOINT.md`: разрешённая заявка GitHub Issue → самоуправляемый Windows Runner → краткий результат в закрытом Issue, полная диагностика только в локальном журнале. Клиентский исходный код фиксировать полным SHA.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Проверка прокси при работающем VPN: различать установление TCP 443, HTTP CONNECT 200 и полноценный TLS/HTTP. CONNECT 200 **не доказывает** работу TLS к целевому серверу. Проверять контрольные сайты через тот же прокси.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Сетевые изменения не применять без согласования; VPN не отключать. Не раскрывать в публичном репозитории учётные данные, адреса выходного прокси, ключи и личные параметры конфигурации.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - При работающем системном VPN соединение к MAX может удаваться после прикладной Socket.Bind привязки к IPv4 физического адаптера. Это не требует изменения маршрутизации системы или конфигурации VPN. Проверять TLS-сертификат и имя сервера.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Разделять четыре ступени доказательств: curl HTTPS 403, WebSocket Upgrade 101, анонимный SESSION_INIT C# и настоящий SMS/LOGIN. Для v0.1.9 первые две подтверждены на пользовательском ПК, третья на внешнем Windows Runner, четвёртая не проверена.
 
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - При локализованном отказе SMS с текстом «Проверка не пройдена» не возвращаться к исследованию TLS, если SESSION_INIT прошёл; проверить наличие server CAPTCHA challenge (opcode 224) и человеко-решаемый результат, без неоднократного SMS.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Проверка VK Captcha должна исполняться человеком в окне, а не автоматическим решателем. CAPTCHA URL/token не сохранять в репозитории или общедоступных логах; при отмене не повторять SMS.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
 - Для v0.1.10 соблюдать раздельные критерии: CI/публикация успешны, но реальный виджет/передача токена требуют пользовательского испытания. Настройки системного VPN не менять.
+  - source: legacy-v2-state
+  - authority: legacy-unverified
