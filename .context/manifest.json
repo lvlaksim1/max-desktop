@@ -44,7 +44,8 @@
   "current_state": ".context/current/state.md",
   "rules": [
     ".context/rules/project-rules.md",
-    ".context/rules/batch-development-standard.md"
+    ".context/rules/batch-development-standard.md",
+    ".context/rules/local-first-workspace.md"
   ],
   "decisions": [
     ".context/decisions/owner-batched-development-2026-10-30.md"
@@ -97,7 +98,7 @@
     "external_gate_reconciliation_required": true,
     "manager_state_coherence_required": true
   },
-  "updated_at": "2026-10-28",
+  "updated_at": "2026-10-30",
   "context_version": "2.1.0",
   "context_capsule_version": "1.3.1",
   "project_manager_version": "2.1.0"

@@ -1,5 +1,13 @@
 # Project Manager Contract v2
 
+## Стандарт пакетной разработки (OWNER-BATCH-EXECUTION-2026-10-30)
+
+Owner-approved development execution: model plans one complete bounded stage; DOMKAT executes the predefined operations as a local batch without per-command model round trips; computer returns one meaningful results/diagnostic summary. Keep about one second between consecutive GUI-control actions, checking UI readiness. Do not add artificial sleeps to PowerShell, CMD, Git, file, build or test operations. On an unexpected error the local batch stops only the affected unsafe work and returns diagnostics; the model, not the batch, evaluates risk and independently decides whether to repair, adjust, skip optional work or escalate to Owner. Do not automatically abandon all development; ask Owner when authority, significant loss, irreversibility or uncertainty requires it. Preserve the existing identity, state integrity, per-branch authority and constraints.
+
+## Local-first workspace directive (Owner, 2026-10-30)
+
+Default to the authorized local Git worktree on DOMKAT under D:\Dev, with this agent's capsule alongside its repository. GitHub is the versioned remote and verified fallback; justified direct GitHub development remains allowed. Check the correct authority branches, local uncommitted changes and integrity marker before actions. Fetch/reconcile before push, never force-overwrite conflicts, and verify remote readback. An unavailable DOMKAT means that a remote recovery may be stale; do not invent local state. Workspace choice grants no new authority.
+
 This file is Core-managed and normative for every Context Capsule v2 Project Manager. The Protocol describes how to operate; this Contract defines the behavioral properties that must remain true.
 
 ## 1. Identity and project ownership
