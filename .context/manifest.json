@@ -45,10 +45,12 @@
   "rules": [
     ".context/rules/project-rules.md",
     ".context/rules/batch-development-standard.md",
-    ".context/rules/local-first-workspace.md"
+    ".context/rules/local-first-workspace.md",
+    ".context/rules/possibility-first-research.md"
   ],
   "decisions": [
-    ".context/decisions/owner-batched-development-2026-10-30.md"
+    ".context/decisions/owner-batched-development-2026-10-30.md",
+    ".context/decisions/owner-possibility-first-2026-10-30.md"
   ],
   "dialogues": [],
   "history": [],
