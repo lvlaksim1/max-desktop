@@ -1,0 +1,82 @@
+{
+  "schema": "engineering-quality-v1",
+  "project": "lvlaksim1/max-desktop",
+  "quick": [
+    {
+      "id": "captcha_resources_prepared",
+      "kind": "static",
+      "command": [
+        "python",
+        "scripts/prepare_captcha_resources.py"
+      ],
+      "timeout_sec": 25
+    },
+    {
+      "id": "application_build",
+      "kind": "build",
+      "command": [
+        "dotnet",
+        "build",
+        "src/MaxDesktop.App/MaxDesktop.App.csproj",
+        "-c",
+        "Release",
+        "--nologo"
+      ],
+      "timeout_sec": 300
+    },
+    {
+      "id": "protocol_synthetic",
+      "kind": "sandbox",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/MaxDesktop.Protocol.Smoke/MaxDesktop.Protocol.Smoke.csproj",
+        "-c",
+        "Release",
+        "--no-launch-profile"
+      ],
+      "timeout_sec": 180
+    }
+  ],
+  "full_additional": [
+    {
+      "id": "websocket_mock",
+      "kind": "mock",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/MaxDesktop.WebSocket.Smoke/MaxDesktop.WebSocket.Smoke.csproj",
+        "-c",
+        "Release",
+        "--no-launch-profile"
+      ],
+      "timeout_sec": 180
+    },
+    {
+      "id": "update_sandbox",
+      "kind": "sandbox",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/MaxDesktop.Update.Smoke/MaxDesktop.Update.Smoke.csproj",
+        "-c",
+        "Release",
+        "--no-launch-profile"
+      ],
+      "timeout_sec": 180
+    },
+    {
+      "id": "architecture_no_cycles",
+      "kind": "static",
+      "command": [
+        "python",
+        "scripts/architecture_explorer.py",
+        "--check"
+      ],
+      "timeout_sec": 40
+    }
+  ]
+}
