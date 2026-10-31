@@ -77,6 +77,31 @@
         "--check"
       ],
       "timeout_sec": 40
+    },
+    {
+      "id": "roslyn_syntax_architecture",
+      "kind": "static",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "quality/roslyn/ArchitectureRoslyn.csproj",
+        "-c",
+        "Release",
+        "--",
+        "."
+      ],
+      "timeout_sec": 220
+    },
+    {
+      "id": "roslyn_regression_gate",
+      "kind": "static",
+      "command": [
+        "python",
+        "quality/roslyn/compare_roslyn_quality.py",
+        "--check"
+      ],
+      "timeout_sec": 40
     }
   ]
 }
